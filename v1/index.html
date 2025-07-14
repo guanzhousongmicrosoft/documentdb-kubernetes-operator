@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Get Started - DocumentDB-Kubernetes-Operator</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Get Started";
+        var mkdocs_page_input_path = "v1/index.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> DocumentDB-Kubernetes-Operator
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Version 1.0</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Get Started</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#quickstart">Quickstart</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#prerequisites">Prerequisites</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#start-a-local-kubernetes-cluster">Start a local Kubernetes cluster</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#install-cert-manager">Install cert-manager</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#install-documentdb-operator-using-the-helm-chart">Install documentdb-operator using the Helm chart</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#deploy-a-documentdb-cluster">Deploy a DocumentDB cluster</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#connect-to-the-documentdb-cluster">Connect to the DocumentDB cluster</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#other-options-try-the-sample-python-app-and-loadbalancer-service">Other options: Try the sample Python app and LoadBalancer service</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#connect-to-documentdb-using-a-python-app">Connect to DocumentDB using a Python app</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#use-a-loadbalancer-service">Use a LoadBalancer service</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#delete-the-documentdb-cluster-and-other-resources">Delete the DocumentDB cluster and other resources</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">DocumentDB-Kubernetes-Operator</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Version 1.0</li>
+      <li class="breadcrumb-item active">Get Started</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/microsoft/documentdb-kubernetes-operator/edit/master/docs/v1/index.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="documentdb-kubernetes-operator">DocumentDB Kubernetes Operator<a class="headerlink" href="#documentdb-kubernetes-operator" title="Permanent link">&para;</a></h1>
+<p>The DocumentDB Kubernetes Operator is an open-source project to run and manage <a href="https://github.com/microsoft/documentdb">DocumentDB</a> on Kubernetes. <code>DocumentDB</code> is the engine powering vCore-based Azure Cosmos DB for MongoDB. It is built on top of PostgreSQL and offers a native implementation of document-oriented NoSQL database, enabling CRUD operations on BSON data types.</p>
+<p>As part of a DocumentDB cluster installation, the operator deploys and manages a set of PostgreSQL instance(s), the <a href="https://github.com/microsoft/documentdb/tree/main/pg_documentdb_gw">DocumentDB Gateway</a>, as well as other Kubernetes resources. While PostgreSQL is used as the underlying storage engine, the gateway ensures that you can connect to the DocumentDB cluster using MongoDB-compatible drivers, APIs, and tools.</p>
+<blockquote>
+<p><strong>Note:</strong> This project is under active development but not yet recommended for production use. We welcome your feedback and contributions!</p>
+</blockquote>
+<h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
+<p>This quickstart guide will walk you through the steps to install the operator, deploy a DocumentDB cluster, access it using <code>mongosh</code>, and perform basic operations.</p>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ul>
+<li><a href="https://helm.sh/docs/intro/install/">Helm</a> installed.</li>
+<li><a href="https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/">kubectl</a> installed.</li>
+<li>A local Kubernetes cluster such as <a href="https://minikube.sigs.k8s.io/docs/start/">minikube</a>, or <a href="https://kind.sigs.k8s.io/docs/user/quick-start/#installation">kind</a> installed. You are free to use any other Kubernetes cluster, but that's not a requirement for this quickstart.</li>
+<li>Install <a href="https://www.mongodb.com/docs/mongodb-shell/install/">mongosh</a> to connect to the DocumentDB cluster.</li>
+</ul>
+<h3 id="start-a-local-kubernetes-cluster">Start a local Kubernetes cluster<a class="headerlink" href="#start-a-local-kubernetes-cluster" title="Permanent link">&para;</a></h3>
+<p>If you are using <code>minikube</code>, use the following command:</p>
+<pre><code class="language-sh">minikube start
+</code></pre>
+<p>If you are using <code>kind</code>, use the following command:</p>
+<pre><code class="language-sh">kind create cluster
+</code></pre>
+<h3 id="install-cert-manager">Install <code>cert-manager</code><a class="headerlink" href="#install-cert-manager" title="Permanent link">&para;</a></h3>
+<p><a href="https://cert-manager.io/docs/">cert-manager</a> is used to manage TLS certificates for the DocumentDB cluster.</p>
+<blockquote>
+<p>If you already have <code>cert-manager</code> installed, you can skip this step.</p>
+</blockquote>
+<pre><code class="language-sh">helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
+</code></pre>
+<p>Verify that <code>cert-manager</code> is installed correctly:</p>
+<pre><code class="language-sh">kubectl get pods -n cert-manager
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAMESPACE           NAME                                            READY   STATUS    RESTARTS
+cert-manager        cert-manager-6794b8d569-d7lwd                   1/1     Running   0
+cert-manager        cert-manager-cainjector-7f69cd69f7-pd9bc        1/1     Running   0          
+cert-manager        cert-manager-webhook-6cc5dccc4b-7jmrh           1/1     Running   0          
+</code></pre>
+<h3 id="install-documentdb-operator-using-the-helm-chart">Install <code>documentdb-operator</code> using the Helm chart<a class="headerlink" href="#install-documentdb-operator-using-the-helm-chart" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>The DocumentDB operator utilizes the <a href="https://cloudnative-pg.io/docs/">CloudNativePG operator</a> behind the scenes, and installs it in the <code>cnpg-system</code> namespace. At this point, it is assumed that the CloudNativePG operator is <strong>not</strong> pre-installed in your cluster.</p>
+</blockquote>
+<p>Use the following command to install the DocumentDB operator:</p>
+<pre><code class="language-sh">helm install documentdb-operator oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator --version 0.0.1 --namespace documentdb-operator --create-namespace
+</code></pre>
+<p>This will install the operator in the <code>documentdb-operator</code> namespace. Verify that it is running:</p>
+<pre><code class="language-sh">kubectl get deployment -n documentdb-operator
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+documentdb-operator   1/1     1            1           113s
+</code></pre>
+<p>You should also see the DocumentDB operator CRDs installed in the cluster:</p>
+<pre><code class="language-sh">kubectl get crd | grep documentdb
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">documentdbs.db.microsoft.com
+</code></pre>
+<h3 id="deploy-a-documentdb-cluster">Deploy a DocumentDB cluster<a class="headerlink" href="#deploy-a-documentdb-cluster" title="Permanent link">&para;</a></h3>
+<p>Create a single-node DocumentDB cluster:</p>
+<pre><code class="language-sh">cat &lt;&lt;EOF | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+---
+apiVersion: db.microsoft.com/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  resource:
+    pvcSize: 10Gi
+  publicLoadBalancer:
+    enabled: false
+EOF
+</code></pre>
+<p>Wait for the DocumentDB cluster to be fully initialized. Verify that it is running:</p>
+<pre><code class="language-sh">kubectl get pods -n documentdb-preview-ns
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAME                   READY   STATUS    RESTARTS   AGE
+documentdb-preview-1   2/2     Running   0          26m
+</code></pre>
+<p>You can also check the DocumentDB CRD instance:</p>
+<pre><code class="language-sh">kubectl get DocumentDB -n documentdb-preview-ns
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAME                 AGE
+documentdb-preview   28m
+</code></pre>
+<h3 id="connect-to-the-documentdb-cluster">Connect to the DocumentDB cluster<a class="headerlink" href="#connect-to-the-documentdb-cluster" title="Permanent link">&para;</a></h3>
+<p>The DocumentDB <code>Pod</code> has the Gateway container running as a sidecar. To keep things simple, the quickstart does not use a public load balancer. So you can connect to the DocumentDB instance directly through the Gateway port <code>10260</code>. For both <code>minikube</code> and <code>kind</code>, this can be easily done using port forwarding:</p>
+<pre><code class="language-sh">kubectl port-forward pod/documentdb-preview-1 10260:10260 -n documentdb-preview-ns
+</code></pre>
+<p>Connect using <a href="https://www.mongodb.com/docs/mongodb-shell/install/">mongosh</a>:</p>
+<pre><code class="language-sh">mongosh 127.0.0.1:10260 -u default_user -p Admin100 --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates
+</code></pre>
+<p>Execute the following commands to create a database and a collection, and insert some documents:</p>
+<pre><code class="language-sh">use testdb
+
+db.createCollection(&quot;test_collection&quot;)
+
+db.test_collection.insertMany([
+  { name: &quot;Alice&quot;, age: 30 },
+  { name: &quot;Bob&quot;, age: 25 },
+  { name: &quot;Charlie&quot;, age: 35 }
+])
+
+db.test_collection.find()
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">[direct: mongos] test&gt; use testdb
+switched to db testdb
+[direct: mongos] testdb&gt; db.createCollection(&quot;test_collection&quot;)
+{ ok: 1 }
+[direct: mongos] testdb&gt; db.test_collection.insertMany([
+...   { name: &quot;Alice&quot;, age: 30 },
+...   { name: &quot;Bob&quot;, age: 25 },
+...   { name: &quot;Charlie&quot;, age: 35 }
+... ])
+{
+  acknowledged: true,
+  insertedIds: {
+    '0': ObjectId('682c3b06491dc99ae02b3fed'),
+    '1': ObjectId('682c3b06491dc99ae02b3fee'),
+    '2': ObjectId('682c3b06491dc99ae02b3fef')
+  }
+}
+[direct: mongos] testdb&gt; db.test_collection.find()
+[
+  { _id: ObjectId('682c3b06491dc99ae02b3fed'), name: 'Alice', age: 30 },
+  { _id: ObjectId('682c3b06491dc99ae02b3fee'), name: 'Bob', age: 25 },
+  {
+    _id: ObjectId('682c3b06491dc99ae02b3fef'),
+    name: 'Charlie',
+    age: 35
+  }
+]
+</code></pre>
+<h3 id="other-options-try-the-sample-python-app-and-loadbalancer-service">Other options: Try the sample Python app and <code>LoadBalancer</code> service<a class="headerlink" href="#other-options-try-the-sample-python-app-and-loadbalancer-service" title="Permanent link">&para;</a></h3>
+<h4 id="connect-to-documentdb-using-a-python-app">Connect to DocumentDB using a Python app<a class="headerlink" href="#connect-to-documentdb-using-a-python-app" title="Permanent link">&para;</a></h4>
+<p>In addition to <code>mongosh</code>, you can also use the sample Python program (that uses the PyMongo client) in the GitHub repository to execute operations on the DocumentDB instance. It inserts a sample document to a <code>movies</code> collection inside the <code>sample_mflix</code> database.</p>
+<pre><code class="language-sh">git clone https://github.com/microsoft/documentdb-kubernetes-operator
+cd documentdb-kubernetes-operator/scripts/test-scripts
+
+pip3 install pymongo
+
+python3 mongo-python-data-pusher.py
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">Inserted document ID: 682c54f9505b85fba77ed154
+{'_id': ObjectId('682c54f9505b85fba77ed154'),
+ 'cast': ['Olivia Colman', 'Emma Stone', 'Rachel Weisz'],
+ 'directors': ['Yorgos Lanthimos'],
+ 'genres': ['Drama', 'History'],
+ 'rated': 'R',
+ 'runtime': 121,
+ 'title': 'The Favourite MongoDB Movie',
+ 'type': 'movie',
+ 'year': 2018}
+</code></pre>
+<p>You can verify this using the <code>mongosh</code> shell:</p>
+<pre><code class="language-sh">use sample_mflix
+db.movies.find()
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">[direct: mongos] testdb&gt; use sample_mflix
+switched to db sample_mflix
+[direct: mongos] sample_mflix&gt; 
+
+[direct: mongos] sample_mflix&gt; db.movies.find()
+[
+  {
+    _id: ObjectId('682c54f9505b85fba77ed154'),
+    title: 'The Favourite MongoDB Movie',
+    genres: [ 'Drama', 'History' ],
+    runtime: 121,
+    rated: 'R',
+    year: 2018,
+    directors: [ 'Yorgos Lanthimos' ],
+    cast: [ 'Olivia Colman', 'Emma Stone', 'Rachel Weisz' ],
+    type: 'movie'
+  }
+]
+</code></pre>
+<h4 id="use-a-loadbalancer-service">Use a <code>LoadBalancer</code> service<a class="headerlink" href="#use-a-loadbalancer-service" title="Permanent link">&para;</a></h4>
+<p>For the quickstart, you connected to DocumentDB using port forwarding. If you are using a Kubernetes cluster in the cloud (for example, <a href="https://learn.microsoft.com/en-us/azure/aks/">Azure Kubernetes Service</a>), and want to use a <code>LoadBalancer</code> service instead, enable it in the <code>DocumentDB</code> spec as follows:</p>
+<pre><code class="language-yaml">publicLoadBalancer:
+    enabled: true
+</code></pre>
+<blockquote>
+<p><code>LoadBalancer</code> service is also supported in <a href="https://minikube.sigs.k8s.io/docs/handbook/accessing/">minikube</a> and <a href="https://kind.sigs.k8s.io/docs/user/loadbalancer">kind</a>.</p>
+</blockquote>
+<p>List the <code>Service</code>s and verify:</p>
+<pre><code class="language-sh">kubectl get services -n documentdb-preview-ns
+</code></pre>
+<p>This will create a <code>LoadBalancer</code> service named <code>documentdb-service-documentdb-preview</code> for the DocumentDB cluster. You can then access the DocumentDB instance using the external IP of the service.</p>
+<pre><code class="language-text">NAME                                    TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)           AGE
+documentdb-preview-r                    ClusterIP      10.0.216.38    &lt;none&gt;          5432/TCP          26m
+documentdb-preview-ro                   ClusterIP      10.0.31.103    &lt;none&gt;          5432/TCP          26m
+documentdb-preview-rw                   ClusterIP      10.0.118.26    &lt;none&gt;          5432/TCP          26m
+documentdb-service-documentdb-preview   LoadBalancer   10.0.228.243   52.149.56.216   10260:30312/TCP   27m
+</code></pre>
+<blockquote>
+<p>If you are using the Python program to connect to DocumentDB, make sure to update the script's <code>host</code> variable with the external IP of your <code>documentdb-service-documentdb-preview</code> LoadBalancer service. Additionally, ensure that you update the default <code>password</code> in the script or, preferably, use environment variables to securely manage sensitive information like passwords.</p>
+</blockquote>
+<h3 id="delete-the-documentdb-cluster-and-other-resources">Delete the DocumentDB cluster and other resources<a class="headerlink" href="#delete-the-documentdb-cluster-and-other-resources" title="Permanent link">&para;</a></h3>
+<pre><code class="language-sh">kubectl delete DocumentDB documentdb-preview -n documentdb-preview-ns
+</code></pre>
+<p>The <code>Pod</code> should now be terminated:</p>
+<pre><code class="language-sh">kubectl get pods -n documentdb-preview-ns
+</code></pre>
+<p>Uninstall the DocumentDB operator:</p>
+<pre><code class="language-sh">helm uninstall documentdb-operator --namespace documentdb-operator
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">These resources were kept due to the resource policy:
+[CustomResourceDefinition] poolers.postgresql.cnpg.io
+[CustomResourceDefinition] publications.postgresql.cnpg.io
+[CustomResourceDefinition] scheduledbackups.postgresql.cnpg.io
+[CustomResourceDefinition] subscriptions.postgresql.cnpg.io
+[CustomResourceDefinition] backups.postgresql.cnpg.io
+[CustomResourceDefinition] clusterimagecatalogs.postgresql.cnpg.io
+[CustomResourceDefinition] clusters.postgresql.cnpg.io
+[CustomResourceDefinition] databases.postgresql.cnpg.io
+[CustomResourceDefinition] imagecatalogs.postgresql.cnpg.io
+
+release &quot;documentdb-operator&quot; uninstalled
+</code></pre>
+<p>Verify that the <code>Pod</code> is removed:</p>
+<pre><code class="language-sh">kubectl get pods -n documentdb-preview-ns
+</code></pre>
+<p>Delete namespace, and CRDs:</p>
+<pre><code class="language-sh">kubectl delete namespace documentdb-operator
+
+kubectl delete crd backups.postgresql.cnpg.io \
+  clusterimagecatalogs.postgresql.cnpg.io \
+  clusters.postgresql.cnpg.io \
+  databases.postgresql.cnpg.io \
+  imagecatalogs.postgresql.cnpg.io \
+  poolers.postgresql.cnpg.io \
+  publications.postgresql.cnpg.io \
+  scheduledbackups.postgresql.cnpg.io \
+  subscriptions.postgresql.cnpg.io \
+  documentdbs.db.microsoft.com
+</code></pre>
+              
+            </div>
+          </div><footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/microsoft/documentdb-kubernetes-operator" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

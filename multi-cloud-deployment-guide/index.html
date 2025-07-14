@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Multi-Cloud DocumentDB Deployment Guide - DocumentDB-Kubernetes-Operator</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Multi-Cloud DocumentDB Deployment Guide";
+        var mkdocs_page_input_path = "multi-cloud-deployment-guide.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> DocumentDB-Kubernetes-Operator
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Version 1.0</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../v1/">Get Started</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">DocumentDB-Kubernetes-Operator</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Multi-Cloud DocumentDB Deployment Guide</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/microsoft/documentdb-kubernetes-operator/edit/master/docs/multi-cloud-deployment-guide.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="multi-cloud-documentdb-deployment-guide">Multi-Cloud DocumentDB Deployment Guide<a class="headerlink" href="#multi-cloud-documentdb-deployment-guide" title="Permanent link">&para;</a></h1>
+<p>This guide provides step-by-step instructions for setting up a multi-cloud
+deployment of DocumentDB (see <a href="https://github.com/microsoft/documentdb">here</a>)
+using KubeFleet (see <a href="https://github.com/kubefleet-dev/kubefleet">here</a>) to 
+manage clusters across clouds. This setup enables high availability and disaster
+recovery. We assume the use of an AKS cluster and an on-prem Kubernetes
+cluster that have network access to one another. Other combinations are
+possible and will be documented as they are tested.</p>
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#architecture-overview">Architecture Overview</a></li>
+<li><a href="#setting-up-the-hub-cluster">Setting Up the Hub Cluster</a></li>
+<li><a href="#adding-clusters-to-fleet">Adding Clusters to Fleet</a></li>
+<li><a href="#installing-operators-and-dependencies">Installing Operators and Dependencies</a></li>
+<li><a href="#deploying-documentdb-operator-to-fleet">Deploying DocumentDB Operator to Fleet</a></li>
+<li><a href="#setting-up-replication">Setting Up Replication</a></li>
+<li><a href="#testing-and-verification">Testing and Verification</a></li>
+<li><a href="#failover-procedures">Failover Procedures</a></li>
+</ol>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Azure account</li>
+<li><a href="https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest">Azure CLI installed and configured with appropriate permissions</a></li>
+<li><a href="https://kubernetes.io/docs/tasks/tools/">kubectl installed</a></li>
+<li><a href="https://helm.sh/docs/intro/install/">helm installed</a></li>
+<li><a href="https://github.com/git-guides/install-git">Git client</a></li>
+<li><a href="https://www.mongodb.com/try/download/shell">MongoSH (for testing connection)</a></li>
+<li>Two kubernetes clusters that are network connected to each other. For example using</li>
+<li><a href="https://learn.microsoft.com/en-us/azure/vpn-gateway/vpn-gateway-about-vpngateways">Azure VPN Gatway</a></li>
+<li><a href="https://learn.microsoft.com/en-us/azure/expressroute/expressroute-introduction">Azure ExpressRoute</a></li>
+<li>ENV variables <code>$AZURE_MEMBER</code> and <code>$ON_PREM_MEMBER</code> with the kubectl context names for your clusters </li>
+<li>(e.g. "azure-documentdb-cluster", "k3s-cluster-context")</li>
+</ul>
+<h2 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h2>
+<p>This multi-cloud deployment uses KubeFleet to manage DocumentDB instances across different cloud providers:</p>
+<ul>
+<li><strong>Hub Cluster</strong>: Central control plane for managing all member clusters</li>
+<li><strong>Member Clusters</strong>: Clusters in different cloud environments (Azure, On-prem)</li>
+<li><strong>DocumentDB Operator</strong>: Custom operator for DocumentDB deployments</li>
+<li><strong>Fleet Networking</strong>: Enables communication between clusters</li>
+</ul>
+<h2 id="setting-up-the-hub-cluster">Setting Up the Hub Cluster<a class="headerlink" href="#setting-up-the-hub-cluster" title="Permanent link">&para;</a></h2>
+<p>The hub cluster serves as the central controller for managing the member clusters, find setup instructions here:
+https://learn.microsoft.com/en-us/azure/kubernetes-fleet/quickstart-create-fleet-and-members?tabs=without-hub-cluster</p>
+<h2 id="adding-clusters-to-fleet">Adding Clusters to Fleet<a class="headerlink" href="#adding-clusters-to-fleet" title="Permanent link">&para;</a></h2>
+<h3 id="adding-aks-cluster-to-the-fleet">Adding AKS cluster to the fleet<a class="headerlink" href="#adding-aks-cluster-to-the-fleet" title="Permanent link">&para;</a></h3>
+<p>Adding an AKS cluster to the fleet is very simple with the Azure portal: 
+https://learn.microsoft.com/en-us/azure/kubernetes-fleet/quickstart-create-fleet-and-members-portal</p>
+<h3 id="adding-other-cluster-to-fleet">Adding other Cluster to Fleet<a class="headerlink" href="#adding-other-cluster-to-fleet" title="Permanent link">&para;</a></h3>
+<p>See also the guide here: 
+https://github.com/Azure/fleet/blob/main/docs/tutorials/Azure/JoinOnPremClustersToFleet.md</p>
+<pre><code class="language-bash"># Add the hub to your kubectl config file
+az fleet get-credentials --resource-group fleet-resource-group --name fleet-hub-name
+
+# This needs to match the member cluster name in your kubectl config file
+clusterName=&quot;your-on-prem-cluster-name&quot;
+
+git clone https://github.com/kubefleet-dev/kubefleet.git
+cd kubefleet
+./hack/membership/joinMC.sh v0.14.8 hub $clusterName
+cd ..
+</code></pre>
+<p>Wait until the cluster shows the correct number of nodes, usually about a minute,
+by using the <code>NODE-COUNT</code> column from this command <code>kubectl get membercluster -A</code></p>
+<p>Then add it to the fleet network</p>
+<pre><code class="language-bash">git clone https://github.com/Azure/fleet-networking
+cd fleet-networking
+./hack/membership/joinMC.sh v0.14.8 v0.3.8 hub $clusterName
+cd ..
+</code></pre>
+<p>These commands also will work to add clusters from other cloud providers. 
+Run <code>kubectl get membercluster -A</code> again and see <code>True</code> under <code>JOINED</code> to confirm.</p>
+<h2 id="installing-operators-and-dependencies">Installing Operators and Dependencies<a class="headerlink" href="#installing-operators-and-dependencies" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Install cert-manager on each cluster:</li>
+</ol>
+<pre><code class="language-bash"># Install on primary
+kubectl config use-context $AZURE_MEMBER
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
+
+# Install on replica
+kubectl config use-context $ON_PREM_MEMBER
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
+
+# Install just the CRDs on the hub for propagation
+kubectl config use-context hub
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.crds.yaml
+</code></pre>
+<p>Verify that <code>cert-manager</code> is installed correctly on each cluster:</p>
+<pre><code class="language-sh">kubectl get pods -n cert-manager
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAMESPACE           NAME                                            READY   STATUS    RESTARTS
+cert-manager        cert-manager-6795b8d569-d7lwd                   1/1     Running   0
+cert-manager        cert-manager-cainjector-8f69cd69f7-pd9bc        1/1     Running   0          
+cert-manager        cert-manager-webhook-7cc5dccc4b-7jmrh           1/1     Running   0          
+</code></pre>
+<ol>
+<li>Install the DocumentDB operator on the hub:</li>
+</ol>
+<pre><code class="language-bash">kubectl config use-context hub
+helm install documentdb-operator oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator --version 0.0.1 --namespace documentdb-operator --create-namespace
+</code></pre>
+<p>Verify the namespaces cnpg-system and documentdb-operator were created</p>
+<pre><code class="language-bash">kubectl get namespaces
+</code></pre>
+<p>Output:</p>
+<pre><code>NAME                                                  STATUS   AGE
+cnpg-system                                           Active   50m
+...
+documentdb-operator                                   Active   50m
+...
+</code></pre>
+<h2 id="deploying-documentdb-operator-to-fleet">Deploying DocumentDB Operator to fleet<a class="headerlink" href="#deploying-documentdb-operator-to-fleet" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">cat &lt;&lt;EOF &gt; documentdb-base.yaml
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: documentdb-base
+spec:
+  resourceSelectors:
+    - group: &quot;&quot;
+      version: v1
+      kind: Namespace
+      name: documentdb-operator
+    - group: &quot;&quot;
+      version: v1
+      kind: Namespace
+      name: cnpg-system
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: documentdbs.db.microsoft.com
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: publications.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: poolers.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: clusterimagecatalogs.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: imagecatalogs.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: scheduledbackups.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: backups.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: subscriptions.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: databases.postgresql.cnpg.io
+    - group: &quot;apiextensions.k8s.io&quot;
+      version: v1
+      kind: CustomResourceDefinition
+      name: clusters.postgresql.cnpg.io
+    # RBAC roles and bindings
+    - group: &quot;rbac.authorization.k8s.io&quot;
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cluster-role
+    - group: &quot;rbac.authorization.k8s.io&quot;
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cloudnative-pg
+    - group: &quot;rbac.authorization.k8s.io&quot;
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cloudnative-pg-edit
+    - group: &quot;rbac.authorization.k8s.io&quot;
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cloudnative-pg-view
+    - group: &quot;rbac.authorization.k8s.io&quot;
+      version: v1
+      kind: ClusterRoleBinding
+      name: documentdb-operator-cluster-rolebinding
+    - group: &quot;rbac.authorization.k8s.io&quot;
+      version: v1
+      kind: ClusterRoleBinding
+      name: documentdb-operator-cloudnative-pg
+    - group: &quot;admissionregistration.k8s.io&quot;
+      version: v1
+      kind: MutatingWebhookConfiguration
+      name: cnpg-mutating-webhook-configuration
+    - group: &quot;admissionregistration.k8s.io&quot;
+      version: v1
+      kind: ValidatingWebhookConfiguration
+      name: cnpg-validating-webhook-configuration
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
+EOF
+
+kubectl config use-context hub
+kubectl apply -f ./documentdb-base.yaml
+</code></pre>
+<p>After a few seconds, ensure that the operator is running on both of the clusters</p>
+<pre><code class="language-sh">kubectl config use-context $AZURE_MEMBER
+kubectl get deployment -n documentdb-operator
+kubectl config use-context $ON_PREM_MEMBER
+kubectl get deployment -n documentdb-operator
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+documentdb-operator   1/1     1            1           113s
+</code></pre>
+<h2 id="setting-up-replication">Setting Up Replication<a class="headerlink" href="#setting-up-replication" title="Permanent link">&para;</a></h2>
+<p>Physical replication provides high availability and disaster recovery capabilities across clusters.</p>
+<ol>
+<li>Create configuration maps to identify clusters:</li>
+</ol>
+<pre><code class="language-bash">kubectl config use-context $ON_PREM_MEMBER
+kubectl create configmap cluster-name -n kube-system --from-literal=name=on-prem-cluster-name
+kubectl config use-context $AZURE_MEMBER
+kubectl create configmap cluster-name -n kube-system --from-literal=name=azure-cluster-name
+</code></pre>
+<p>OR</p>
+<pre><code class="language-bash">cat &lt;&lt;EOF &gt; azure-cluster-name.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-name
+  namespace: kube-system
+data:
+  name: &quot;azure-cluster-name&quot;
+EOF
+
+cat &lt;&lt;EOF &gt; on-prem-name.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-name
+  namespace: kube-system
+data:
+  name: &quot;on-prem-cluster-name&quot;
+EOF
+
+kubectl config use-context $AZURE_MEMBER
+kubectl apply -f ./primary-name.yaml
+kubectl config use-context $ON_PREM_MEMBER
+kubectl apply -f ./replica-name.yaml
+</code></pre>
+<ol>
+<li>Apply the DocumentDB resource configuration:</li>
+</ol>
+<pre><code class="language-bash">cat &lt;&lt;EOF &gt; documentdb-resource.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+
+---
+
+apiVersion: db.microsoft.com/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  resource:
+    pvcSize: 10Gi
+  clusterReplication:
+    primary: azure-cluster-name
+    clusterList:
+      - azure-cluster-name
+      - on-prem-cluster-name
+  publicLoadBalancer:
+    enabled: true
+
+---
+
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: documentdb-crp
+spec:
+  resourceSelectors:
+    - group: &quot;&quot;
+      version: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
+EOF
+
+kubectl config use-context hub
+kubectl apply -f ./documentdb-resource.yaml
+</code></pre>
+<p>After a few seconds, ensure that the operator is running on both of the clusters</p>
+<pre><code class="language-sh">kubectl config use-context $AZURE_MEMBER
+kubectl get pods -n documentdb-operator-ns
+kubectl config use-context $ON_PREM_MEMBER
+kubectl get pods -n documentdb-operator-ns
+</code></pre>
+<p>Output:</p>
+<pre><code class="language-text">NAME                   READY   STATUS    RESTARTS   AGE
+azure-cluster-name-1   2/2     Running   0          3m33s
+</code></pre>
+<h2 id="testing-and-verification">Testing and Verification<a class="headerlink" href="#testing-and-verification" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Test connection to DocumentDB:</li>
+</ol>
+<pre><code class="language-bash"># Get the service IP from primary (azure)
+kubectl config use-context $AZURE_MEMBER
+service_ip=$(kubectl get service documentdb-service-documentdb-preview -n documentdb-preview-ns -o jsonpath=&quot;{.status.loadBalancer.ingress[0].ip}&quot;)
+
+# Connect using mongosh
+mongosh $service_ip:10260 -u default_user -p Admin100 --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates
+
+# Create a test collection and document
+use test
+db.testCollection.insertOne({ name: &quot;Test Document&quot;, value: 1 })
+db.testCollection.find()
+</code></pre>
+<ol>
+<li>For replication testing, verify data is correctly replicated:</li>
+<li>Insert data on the primary</li>
+<li>Verify it appears on the replica</li>
+</ol>
+<h2 id="failover-procedures">Failover Procedures<a class="headerlink" href="#failover-procedures" title="Permanent link">&para;</a></h2>
+<h3 id="physical-replication-failover">Physical Replication Failover<a class="headerlink" href="#physical-replication-failover" title="Permanent link">&para;</a></h3>
+<p>To initiate a failover from the primary to a replica cluster, run this against the hub:</p>
+<pre><code class="language-bash">kubectl config use-context hub
+kubectl patch documentdb documentdb-preview -n documentdb-preview-ns \
+  --type='json' -p='[
+  {&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/primary&quot;, &quot;value&quot;:&quot;on-prem-cluster-name&quot;},
+  {&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/clusterList&quot;, &quot;value&quot;:[&quot;on-prem-cluster-name&quot;]}
+  ]'
+</code></pre>
+<hr />
+<p><strong>Note</strong>: This guide assumes a basic understanding of Kubernetes, container orchestration, and distributed database concepts. Adjust resource sizes, node counts, and other parameters according to your production requirements.</p>
+              
+            </div>
+          </div><footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/microsoft/documentdb-kubernetes-operator" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
