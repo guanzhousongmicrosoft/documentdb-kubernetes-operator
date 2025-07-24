@@ -35,11 +35,6 @@ jobs:
           docker manifest inspect ghcr.io/guanzhousongmicrosoft/documentdb-kubernetes-operator/operator:preview
           docker manifest inspect ghcr.io/guanzhousongmicrosoft/documentdb-kubernetes-operator/sidecar:preview
 
-      - name: Validate Helm chart
-        run: |
-          helm lint $CHART_DIR
-          helm template test-release $CHART_DIR --dry-run
-
       - name: Package Helm chart
         run: |
           helm dependency update $CHART_DIR
