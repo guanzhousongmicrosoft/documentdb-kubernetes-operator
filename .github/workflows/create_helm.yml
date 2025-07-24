@@ -12,6 +12,8 @@ env:
   CHART_NAME: documentdb-chart
   CHART_VERSION: ${{ github.event.inputs.chart_version || '0.0.1' }}
   GHCR_REPO: ghcr.io/${{ github.repository_owner }}
+  # Chart directory name and actual chart name can be different
+  CHART_DIR: documentdb-chart
 
 jobs:
   publish:
@@ -27,10 +29,23 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Verify multi-platform images
+        run: |
+          echo "Verifying multi-platform images..."
+          docker manifest inspect ghcr.io/guanzhousongmicrosoft/documentdb-kubernetes-operator/operator:preview
+          docker manifest inspect ghcr.io/guanzhousongmicrosoft/documentdb-kubernetes-operator/sidecar:preview
+
+      - name: Validate Helm chart
+        run: |
+          helm lint $CHART_DIR
+          helm template test-release $CHART_DIR --dry-run
+
       - name: Package Helm chart
         run: |
-          helm dependency update documentdb-chart
-          helm package $CHART_NAME --version $CHART_VERSION
+          helm dependency update $CHART_DIR
+          helm package $CHART_DIR --version $CHART_VERSION
+          echo "Generated chart package:"
+          ls -la documentdb-operator-${CHART_VERSION}.tgz
 
       - name: Log in to GHCR
         run: |
