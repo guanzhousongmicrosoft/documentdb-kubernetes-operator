@@ -66,19 +66,47 @@ runs:
         if [[ "${{ inputs.use-local-chart }}" == "true" ]]; then
           echo "Installing from local Helm chart..."
           
-          # Extract and prepare local chart - artifacts are in the workspace root
-          if [ -f ./artifacts/build-helm-chart/documentdb-operator-${{ inputs.chart-version }}.tgz ]; then
-            tar -xzf ./artifacts/build-helm-chart/documentdb-operator-${{ inputs.chart-version }}.tgz
+          # Extract and prepare local chart - artifacts are in platform-specific directories
+          CHART_ARTIFACT_DIR="./artifacts/build-helm-chart-${{ inputs.architecture }}"
+          
+          if [ -d "$CHART_ARTIFACT_DIR" ]; then
+            echo "Found chart artifact directory: $CHART_ARTIFACT_DIR"
+            ls -la "$CHART_ARTIFACT_DIR"
             
-            # Install the operator using the local chart
-            helm install documentdb-operator ./documentdb-operator \
-              --namespace ${{ inputs.operator-namespace }} \
-              --create-namespace \
-              --wait \
-              --timeout=8m
+            # Find the chart package file
+            CHART_FILE=$(find "$CHART_ARTIFACT_DIR" -name "*.tgz" | head -1)
+            
+            if [ -n "$CHART_FILE" ]; then
+              echo "Found chart file: $CHART_FILE"
+              
+              # Extract the chart
+              tar -xzf "$CHART_FILE"
+              
+              # Find the extracted chart directory (should match the chart name pattern)
+              CHART_DIR=$(find . -maxdepth 1 -name "documentdb-chart-*" -type d | head -1)
+              
+              if [ -n "$CHART_DIR" ]; then
+                echo "Installing operator from local chart: $CHART_DIR"
+                
+                # Install the operator using the local chart
+                helm install documentdb-operator "$CHART_DIR" \
+                  --namespace ${{ inputs.operator-namespace }} \
+                  --create-namespace \
+                  --wait \
+                  --timeout=8m
+              else
+                echo "❌ Could not find extracted chart directory"
+                ls -la . | grep documentdb || echo "No documentdb directories found"
+                exit 1
+              fi
+            else
+              echo "❌ No .tgz chart file found in $CHART_ARTIFACT_DIR"
+              ls -la "$CHART_ARTIFACT_DIR"
+              exit 1
+            fi
           else
-            echo "❌ Local Helm chart artifact not found"
-            ls -la ./artifacts/build-helm-chart/ || echo "Artifact directory not found"
+            echo "❌ Local Helm chart artifact directory not found: $CHART_ARTIFACT_DIR"
+            echo "Available artifact directories:"
             ls -la ./artifacts/ || echo "No artifacts directory found"
             exit 1
           fi
