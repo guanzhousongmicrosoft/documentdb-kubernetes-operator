@@ -31,7 +31,6 @@ jobs:
     with:
       image_tag_prefix: 'integration-test'
       chart_version_prefix: '0.1.0'
-      push_to_registry: ${{ github.event_name != 'pull_request' }}
     secrets: inherit
 
   integration-test:
