@@ -37,8 +37,8 @@ env:
   OPERATOR_NS: documentdb-operator
   DB_NS: documentdb-e2e-test
   DB_NAME: documentdb-e2e
-  DB_USERNAME: default_user
-  DB_PASSWORD: Admin100
+  DB_USERNAME: k8s_secret_user
+  DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
 
 jobs:
@@ -240,16 +240,35 @@ jobs:
         kubectl get deployment documentdb-operator -n $OPERATOR_NS -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
         echo ""
 
+    - name: Create DocumentDB credentials secret
+      run: |
+        echo "Creating DocumentDB credentials secret for ${{ matrix.architecture }}..."
+        
+        # Create the namespace first
+        kubectl create namespace ${DB_NS} --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Create the credentials secret as required by the sidecar injector plugin
+        # Based on the documentation: the plugin requires a secret named 'documentdb-credentials'
+        # with 'username' and 'password' keys
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: documentdb-credentials
+          namespace: ${DB_NS}
+        type: Opaque
+        stringData:
+          username: ${DB_USERNAME}
+          password: ${DB_PASSWORD}
+        EOF
+        
+        echo "✓ DocumentDB credentials secret created successfully"
+
     - name: Deploy DocumentDB Cluster - ${{ matrix.test_scenario_name }}
       run: |
         echo "Deploying DocumentDB cluster with configuration: ${{ matrix.test_scenario_name }} on ${{ matrix.architecture }}"
         
         cat <<EOF | kubectl apply -f -
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: ${DB_NS}
-        ---
         apiVersion: db.microsoft.com/preview
         kind: DocumentDB
         metadata:
