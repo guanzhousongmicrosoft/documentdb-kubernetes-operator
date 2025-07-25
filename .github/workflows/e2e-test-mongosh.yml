@@ -222,32 +222,48 @@ jobs:
         
         echo "✓ Cluster resource check completed for ${{ matrix.architecture }}"
 
-    - name: Pre-load cert-manager images
+    - name: Pre-load cert-manager images (optional)
+      continue-on-error: true
       run: |
-        echo "Pre-loading cert-manager images to avoid network issues..."
+        echo "Attempting to pre-load cert-manager images (optional step)..."
         
-        # Define cert-manager version and images
+        # Define cert-manager version
         CERT_MANAGER_VERSION="v1.15.3"
         
-        # Pull cert-manager images
-        echo "Pulling cert-manager images..."
-        docker pull docker.io/jetstack/cert-manager-controller:$CERT_MANAGER_VERSION
-        docker pull docker.io/jetstack/cert-manager-webhook:$CERT_MANAGER_VERSION  
-        docker pull docker.io/jetstack/cert-manager-cainjector:$CERT_MANAGER_VERSION
-        docker pull docker.io/jetstack/cert-manager-startupapicheck:$CERT_MANAGER_VERSION
+        # Try to pull cert-manager images (this may fail due to network issues)
+        echo "Attempting to pull cert-manager images from quay.io..."
         
-        # Load images into kind cluster
-        echo "Loading cert-manager images into kind cluster..."
-        kind load docker-image docker.io/jetstack/cert-manager-controller:$CERT_MANAGER_VERSION \
-          --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
-        kind load docker-image docker.io/jetstack/cert-manager-webhook:$CERT_MANAGER_VERSION \
-          --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
-        kind load docker-image docker.io/jetstack/cert-manager-cainjector:$CERT_MANAGER_VERSION \
-          --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
-        kind load docker-image docker.io/jetstack/cert-manager-startupapicheck:$CERT_MANAGER_VERSION \
-          --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
+        # Use a timeout for each pull operation
+        timeout 60 docker pull quay.io/jetstack/cert-manager-controller:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull controller image"
+        timeout 60 docker pull quay.io/jetstack/cert-manager-webhook:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull webhook image"
+        timeout 60 docker pull quay.io/jetstack/cert-manager-cainjector:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull cainjector image"
+        timeout 60 docker pull quay.io/jetstack/cert-manager-startupapicheck:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull startupapicheck image"
+        
+        # Load images into kind cluster if they were pulled successfully
+        echo "Loading available cert-manager images into kind cluster..."
+        
+        # Check if images exist before loading
+        if docker images | grep -q "quay.io/jetstack/cert-manager-controller.*$CERT_MANAGER_VERSION"; then
+          kind load docker-image quay.io/jetstack/cert-manager-controller:$CERT_MANAGER_VERSION \
+            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load controller image"
+        fi
+        
+        if docker images | grep -q "quay.io/jetstack/cert-manager-webhook.*$CERT_MANAGER_VERSION"; then
+          kind load docker-image quay.io/jetstack/cert-manager-webhook:$CERT_MANAGER_VERSION \
+            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load webhook image"
+        fi
+        
+        if docker images | grep -q "quay.io/jetstack/cert-manager-cainjector.*$CERT_MANAGER_VERSION"; then
+          kind load docker-image quay.io/jetstack/cert-manager-cainjector:$CERT_MANAGER_VERSION \
+            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load cainjector image"
+        fi
+        
+        if docker images | grep -q "quay.io/jetstack/cert-manager-startupapicheck.*$CERT_MANAGER_VERSION"; then
+          kind load docker-image quay.io/jetstack/cert-manager-startupapicheck:$CERT_MANAGER_VERSION \
+            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load startupapicheck image"
+        fi
           
-        echo "✓ cert-manager images pre-loaded successfully"
+        echo "✓ cert-manager image pre-loading completed (some images may not have been loaded due to network issues)"
 
     - name: Install cert-manager
       run: |
@@ -280,20 +296,17 @@ jobs:
         # Check if cert-manager is already installed
         if helm list -n $CERT_MANAGER_NS 2>/dev/null | grep -q cert-manager; then
           echo "cert-manager is already installed, skipping installation"
+          echo "CERT_MANAGER_READY=true" >> $GITHUB_ENV
         else
-          echo "Installing cert-manager using stable Docker Hub images..."
+          echo "Installing cert-manager using default registry..."
           
-          # Install cert-manager with Docker Hub images to avoid Quay.io issues
+          # Install cert-manager with default images (quay.io)
           helm install cert-manager jetstack/cert-manager \
             --namespace $CERT_MANAGER_NS \
             --create-namespace \
             --version v1.15.3 \
             --set installCRDs=true \
-            --set image.repository=docker.io/jetstack/cert-manager-controller \
-            --set webhook.image.repository=docker.io/jetstack/cert-manager-webhook \
-            --set cainjector.image.repository=docker.io/jetstack/cert-manager-cainjector \
-            --set startupapicheck.image.repository=docker.io/jetstack/cert-manager-startupapicheck \
-            --wait --timeout=10m
+            --wait --timeout=5m
           
           # Verify installation step by step
           echo "Verifying cert-manager installation..."
@@ -323,7 +336,7 @@ jobs:
           
           # Wait for pods to be ready with explicit timeout and better error handling
           echo "Waiting for cert-manager pods to be ready..."
-          if kubectl wait --for=condition=Ready pods --all -n $CERT_MANAGER_NS --timeout=300s; then
+          if kubectl wait --for=condition=Ready pods --all -n $CERT_MANAGER_NS --timeout=180s; then
             echo "✓ cert-manager installation completed successfully on ${{ matrix.architecture }}"
             echo "CERT_MANAGER_READY=true" >> $GITHUB_ENV
           else
