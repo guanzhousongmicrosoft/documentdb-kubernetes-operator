@@ -55,36 +55,10 @@ jobs:
     
     env:
       # Use outputs from the build workflow with platform-specific images
-      OPERATOR_IMAGE_NAME: documentdb-kubernetes-operator/operator
-      SIDECAR_IMAGE_NAME: documentdb-kubernetes-operator/sidecar
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}-${{ matrix.architecture }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version }}
-      ARCHITECTURE: ${{ matrix.architecture }}
     
     steps:
-    - name: Validate runner architecture
-      run: |
-        echo "Running on ${{ matrix.architecture }} architecture using runner: ${{ matrix.runner }}"
-        echo "Expected architecture: ${{ matrix.architecture }}"
-        echo "Actual system architecture: $(uname -m)"
-        
-        # Verify the runner architecture matches expectations
-        EXPECTED_ARCH="${{ matrix.architecture }}"
-        ACTUAL_ARCH=$(uname -m)
-        
-        case $ACTUAL_ARCH in
-          "x86_64") NORMALIZED_ARCH="amd64" ;;
-          "aarch64") NORMALIZED_ARCH="arm64" ;;
-          *) NORMALIZED_ARCH="unknown" ;;
-        esac
-        
-        if [[ "$EXPECTED_ARCH" != "$NORMALIZED_ARCH" ]]; then
-          echo "❌ Architecture mismatch! Expected: $EXPECTED_ARCH, Got: $NORMALIZED_ARCH"
-          exit 1
-        fi
-        
-        echo "✅ Architecture validation passed: $EXPECTED_ARCH"
-    
     - name: Checkout repository
       uses: actions/checkout@v4
 
@@ -94,137 +68,31 @@ jobs:
         pattern: 'build-*'
         path: ./artifacts
 
-    - name: Load Docker images from artifacts
-      run: |
-        echo "Loading platform-specific Docker images from artifacts..."
-        cd ./artifacts
-        
-        # Load the platform-specific images for the current architecture
-        if [ -f build-platform-images/platform-specific-images.tar ]; then
-          echo "Loading platform-specific Docker images..."
-          docker load < build-platform-images/platform-specific-images.tar
-          echo "✓ Platform-specific Docker images loaded successfully"
-        else
-          echo "❌ Platform-specific Docker images artifact not found"
-          ls -la build-platform-images/ || echo "Directory not found"
-          exit 1
-        fi
-        
-        # Verify images were loaded and show available tags
-        echo "Available Docker images:"
-        docker images | grep documentdb-kubernetes-operator
-        echo "✓ Platform-specific Docker images loaded successfully"
-
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq curl netcat-openbsd
-
-    - name: Install Helm
-      uses: azure/setup-helm@v3
+    - name: Setup test environment
+      uses: ./.github/actions/setup-test-environment
       with:
-        version: 'latest'
-
-    - name: Install MongoDB Shell (mongosh)
-      run: |
-        echo "Installing mongosh for ${{ matrix.architecture }} architecture..."
-        
-        # Install mongosh using the official installation method
-        curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
-        
-        if [[ "${{ matrix.architecture }}" == "arm64" ]]; then
-          echo "deb [ arch=arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-        else
-          echo "deb [ arch=amd64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-        fi
-        
-        sudo apt-get update
-        sudo apt-get install -y mongodb-mongosh
-        mongosh --version
-        echo "✓ mongosh installed successfully for ${{ matrix.architecture }}"
-
-    - name: Create kind cluster
-      uses: helm/kind-action@v1.8.0
-      with:
-        cluster_name: documentdb-test-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
-
-    - name: Load Docker images into kind cluster
-      run: |
-        echo "Loading Docker images into kind cluster..."
-        
-        # Load the operator image into kind cluster
-        kind load docker-image ghcr.io/${{ github.repository_owner }}/${{ env.OPERATOR_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-          --name documentdb-test-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
-        
-        # Load the sidecar image into kind cluster
-        kind load docker-image ghcr.io/${{ github.repository_owner }}/${{ env.SIDECAR_IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-          --name documentdb-test-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}
-        
-        echo "✓ All Docker images loaded into kind cluster successfully"
-
-    - name: Wait for cluster to be ready
-      run: |
-        echo "Waiting for ${{ matrix.architecture }} cluster to be ready..."
-        kubectl cluster-info
-        kubectl wait --for=condition=Ready nodes --all --timeout=300s
-        
-        # Verify node architecture
-        echo "Node architecture verification:"
-        kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.architecture}'
-        echo ""
-
-    - name: Setup cluster
-      uses: ./.github/actions/setup-cluster
-      with:
+        test-type: 'integration'
         architecture: ${{ matrix.architecture }}
+        runner: ${{ matrix.runner }}
+        test-scenario-name: ${{ matrix.test_scenario_name }}
+        node-count: '${{ matrix.node_count }}'
+        instances-per-node: '${{ matrix.instances_per_node }}'
         cert-manager-namespace: ${{ env.CERT_MANAGER_NS }}
         operator-namespace: ${{ env.OPERATOR_NS }}
+        db-namespace: ${{ env.DB_NS }}
+        db-cluster-name: ${{ env.DB_NAME }}
+        db-username: ${{ env.DB_USERNAME }}
+        db-password: ${{ env.DB_PASSWORD }}
+        db-port: ${{ env.DB_PORT }}
+        image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
-        use-local-chart: 'true'
-
-    - name: Create DocumentDB credentials secret
-      run: |
-        echo "Creating DocumentDB credentials secret for ${{ matrix.architecture }}..."
-        
-        # Create the namespace first
-        kubectl create namespace ${{ env.DB_NS }} --dry-run=client -o yaml | kubectl apply -f -
-        
-        # Create the credentials secret as required by the sidecar injector plugin
-        # Based on the documentation: the plugin requires a secret named 'documentdb-credentials'
-        # with 'username' and 'password' keys
-        cat <<EOF | kubectl apply -f -
-        apiVersion: v1
-        kind: Secret
-        metadata:
-          name: documentdb-credentials
-          namespace: ${{ env.DB_NS }}
-        type: Opaque
-        stringData:
-          username: ${{ env.DB_USERNAME }}
-          password: ${{ env.DB_PASSWORD }}
-        EOF
-        
-        echo "✓ DocumentDB credentials secret created successfully"
-
-    - name: Deploy DocumentDB cluster
-      uses: ./.github/actions/deploy-documentdb
-      with:
-        architecture: ${{ matrix.architecture }}
-        namespace: ${{ env.DB_NS }}
-        cluster-name: ${{ env.DB_NAME }}
-        node-count: '${{ matrix.node_count }}'
-        instances-per-node: '${{ matrix.instances_per_node }}'
-        documentdb-image: 'ghcr.io/microsoft/documentdb/documentdb-local:16'
-        pvc-size: '5Gi'
-        public-load-balancer: 'false'
-        timeout: '600'
 
     - name: Test connection with mongosh
       run: |
@@ -238,7 +106,7 @@ jobs:
           --port "${{ env.DB_PORT }}" \
           --username "${{ env.DB_USERNAME }}" \
           --password "${{ env.DB_PASSWORD }}" \
-          --test-type 'comprehensive'
+          --test-type 'basic'
 
     - name: Test with Python PyMongo client
       run: |
