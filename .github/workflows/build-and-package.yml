@@ -150,26 +150,94 @@ jobs:
       run: |
         echo "Loading all Docker images from artifacts..."
         
+        # List available artifacts first
+        echo "Available artifact directories:"
+        ls -la ./artifacts/
+        
         # Load operator images
-        docker load < ./artifacts/build-docker-operator-amd64/operator-amd64-image.tar
-        docker load < ./artifacts/build-docker-operator-arm64/operator-arm64-image.tar
+        echo "Loading operator AMD64 image..."
+        if [ -f ./artifacts/build-docker-operator-amd64/operator-amd64-image.tar ]; then
+          docker load < ./artifacts/build-docker-operator-amd64/operator-amd64-image.tar
+          echo "✓ Operator AMD64 image loaded"
+        else
+          echo "❌ Operator AMD64 image file not found"
+          ls -la ./artifacts/build-docker-operator-amd64/ || echo "Directory not found"
+          exit 1
+        fi
+        
+        echo "Loading operator ARM64 image..."
+        if [ -f ./artifacts/build-docker-operator-arm64/operator-arm64-image.tar ]; then
+          docker load < ./artifacts/build-docker-operator-arm64/operator-arm64-image.tar
+          echo "✓ Operator ARM64 image loaded"
+        else
+          echo "❌ Operator ARM64 image file not found"
+          ls -la ./artifacts/build-docker-operator-arm64/ || echo "Directory not found"
+          exit 1
+        fi
         
         # Load sidecar images
-        docker load < ./artifacts/build-docker-sidecar-amd64/sidecar-amd64-image.tar
-        docker load < ./artifacts/build-docker-sidecar-arm64/sidecar-arm64-image.tar
+        echo "Loading sidecar AMD64 image..."
+        if [ -f ./artifacts/build-docker-sidecar-amd64/sidecar-amd64-image.tar ]; then
+          docker load < ./artifacts/build-docker-sidecar-amd64/sidecar-amd64-image.tar
+          echo "✓ Sidecar AMD64 image loaded"
+        else
+          echo "❌ Sidecar AMD64 image file not found"
+          ls -la ./artifacts/build-docker-sidecar-amd64/ || echo "Directory not found"
+          exit 1
+        fi
+        
+        echo "Loading sidecar ARM64 image..."
+        if [ -f ./artifacts/build-docker-sidecar-arm64/sidecar-arm64-image.tar ]; then
+          docker load < ./artifacts/build-docker-sidecar-arm64/sidecar-arm64-image.tar
+          echo "✓ Sidecar ARM64 image loaded"
+        else
+          echo "❌ Sidecar ARM64 image file not found"
+          ls -la ./artifacts/build-docker-sidecar-arm64/ || echo "Directory not found"
+          exit 1
+        fi
         
         echo "✓ All Docker images loaded successfully"
-        docker images | grep documentdb-kubernetes-operator
+        echo "Loaded images:"
+        docker images | grep documentdb-kubernetes-operator | sort
 
     - name: Create operator multi-platform manifest
       run: |
         echo "Creating multi-platform manifest for operator..."
         
+        # First, inspect the individual architecture images to verify they exist
+        echo "Inspecting operator AMD64 image..."
+        docker image inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-amd64 || {
+          echo "❌ AMD64 operator image not found"
+          docker images | grep operator
+          exit 1
+        }
+        
+        echo "Inspecting operator ARM64 image..."
+        docker image inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-arm64 || {
+          echo "❌ ARM64 operator image not found"
+          docker images | grep operator
+          exit 1
+        }
+        
+        echo "✓ Both architecture-specific operator images verified"
+        
         # Create the manifest for operator
+        echo "Creating manifest with images:"
+        echo "  - ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-amd64"
+        echo "  - ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-arm64"
+        
         docker manifest create ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }} \
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-amd64 \
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-arm64
         
+        # Annotate the manifest with platform information
+        docker manifest annotate ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }} \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-amd64 \
+          --os linux --arch amd64
+        
+        docker manifest annotate ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }} \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-arm64 \
+          --os linux --arch arm64
         
         # Inspect the manifest to verify it was created correctly
         docker manifest inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}
@@ -180,10 +248,40 @@ jobs:
       run: |
         echo "Creating multi-platform manifest for sidecar..."
         
+        # First, inspect the individual architecture images to verify they exist
+        echo "Inspecting sidecar AMD64 image..."
+        docker image inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-amd64 || {
+          echo "❌ AMD64 sidecar image not found"
+          docker images | grep sidecar
+          exit 1
+        }
+        
+        echo "Inspecting sidecar ARM64 image..."
+        docker image inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-arm64 || {
+          echo "❌ ARM64 sidecar image not found"
+          docker images | grep sidecar
+          exit 1
+        }
+        
+        echo "✓ Both architecture-specific sidecar images verified"
+        
         # Create the manifest for sidecar
+        echo "Creating manifest with images:"
+        echo "  - ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-amd64"
+        echo "  - ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-arm64"
+        
         docker manifest create ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }} \
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-amd64 \
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-arm64
+        
+        # Annotate the manifest with platform information
+        docker manifest annotate ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }} \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-amd64 \
+          --os linux --arch amd64
+        
+        docker manifest annotate ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }} \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-arm64 \
+          --os linux --arch arm64
         
         # Inspect the manifest to verify it was created correctly
         docker manifest inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}
