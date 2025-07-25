@@ -59,9 +59,10 @@ jobs:
     
     strategy:
       matrix:
+        arch: [amd64, arm64]
         include:
           - architecture: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
