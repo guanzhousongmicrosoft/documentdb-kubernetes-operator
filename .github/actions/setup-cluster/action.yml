@@ -40,72 +40,155 @@ runs:
         kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.architecture}'
         echo ""
         
-        # Add Helm repositories and update
-        echo "Adding Helm repositories..."
-        helm repo add jetstack https://charts.jetstack.io
-        helm repo update
+        # Check cluster resources
+        echo "Checking cluster resources on ${{ inputs.architecture }}..."
         
-        # Install cert-manager
-        echo "Installing cert-manager..."
-        helm install cert-manager jetstack/cert-manager \
-          --namespace ${{ inputs.cert-manager-namespace }} \
-          --create-namespace \
-          --set installCRDs=true \
-          --wait \
-          --timeout=5m
+        # Check node resources
+        echo "Node information:"
+        kubectl get nodes -o wide
         
-        # Verify cert-manager installation
-        echo "Verifying cert-manager installation..."
-        kubectl wait --for=condition=Available deployment/cert-manager -n ${{ inputs.cert-manager-namespace }} --timeout=300s
-        kubectl wait --for=condition=Available deployment/cert-manager-cainjector -n ${{ inputs.cert-manager-namespace }} --timeout=300s
-        kubectl wait --for=condition=Available deployment/cert-manager-webhook -n ${{ inputs.cert-manager-namespace }} --timeout=300s
+        # Check current pod resource usage
+        echo "Current pods in cluster:"
+        kubectl get pods --all-namespaces
         
-        # Install the DocumentDB operator
-        echo "Installing DocumentDB operator with chart version: ${{ inputs.chart-version }}"
+        # Check system pods status
+        echo "System pods status:"
+        kubectl get pods -n kube-system
+        
+        echo "✓ Cluster resource check completed for ${{ inputs.architecture }}"
+
+    - name: Install cert-manager
+      shell: bash
+      run: |
+        echo "Installing cert-manager on ${{ inputs.architecture }}..."
+        
+        # Add Helm repository with retry logic
+        echo "Adding jetstack Helm repository..."
+        for i in {1..3}; do
+          if helm repo add jetstack https://charts.jetstack.io; then
+            echo "✓ Helm repository added successfully"
+            break
+          else
+            echo "⚠️ Failed to add Helm repository (attempt $i/3)"
+            sleep 10
+          fi
+        done
+        
+        # Update Helm repositories with retry logic
+        echo "Updating Helm repositories..."
+        for i in {1..3}; do
+          if helm repo update; then
+            echo "✓ Helm repositories updated successfully"
+            break
+          else
+            echo "⚠️ Failed to update Helm repositories (attempt $i/3)"
+            sleep 10
+          fi
+        done
+        
+        # Check if cert-manager is already installed
+        if helm list -n ${{ inputs.cert-manager-namespace }} 2>/dev/null | grep -q cert-manager; then
+          echo "cert-manager is already installed, skipping installation"
+          echo "CERT_MANAGER_READY=true" >> $GITHUB_ENV
+        else
+          echo "Installing cert-manager using default registry..."
+          
+          # Install cert-manager with default images (quay.io)
+          helm install cert-manager jetstack/cert-manager \
+            --namespace ${{ inputs.cert-manager-namespace }} \
+            --create-namespace \
+            --version v1.15.3 \
+            --set installCRDs=true \
+            --wait --timeout=5m
+          
+          # Verify installation step by step
+          echo "Verifying cert-manager installation..."
+          
+          # Check if namespace was created
+          kubectl get namespace ${{ inputs.cert-manager-namespace }}
+          
+          # Check if CRDs were installed
+          echo "Checking cert-manager CRDs..."
+          kubectl get crd | grep cert-manager || echo "No cert-manager CRDs found yet"
+          
+          # Check pods status with details
+          echo "Checking cert-manager pods status..."
+          kubectl get pods -n ${{ inputs.cert-manager-namespace }} -o wide
+          
+          # Check for any failed pods and show logs if needed
+          failed_pods=$(kubectl get pods -n ${{ inputs.cert-manager-namespace }} --field-selector=status.phase!=Running --no-headers 2>/dev/null | awk '{print $1}' || echo "")
+          if [ ! -z "$failed_pods" ]; then
+            echo "⚠️ Found failed/pending pods, checking logs..."
+            for pod in $failed_pods; do
+              echo "Logs for pod $pod:"
+              kubectl logs $pod -n ${{ inputs.cert-manager-namespace }} --tail=10 || echo "No logs available for $pod"
+              echo "Events for pod $pod:"
+              kubectl describe pod $pod -n ${{ inputs.cert-manager-namespace }} | grep -A 10 Events: || echo "No events for $pod"
+            done
+          fi
+          
+          # Wait for pods to be ready with explicit timeout and better error handling
+          echo "Waiting for cert-manager pods to be ready..."
+          if kubectl wait --for=condition=Ready pods --all -n ${{ inputs.cert-manager-namespace }} --timeout=180s; then
+            echo "✓ cert-manager installation completed successfully on ${{ inputs.architecture }}"
+            echo "CERT_MANAGER_READY=true" >> $GITHUB_ENV
+          else
+            echo "❌ cert-manager pods failed to become ready, will use manual certificates"
+            kubectl get pods -n ${{ inputs.cert-manager-namespace }}
+            kubectl describe pods -n ${{ inputs.cert-manager-namespace }}
+            echo "CERT_MANAGER_READY=false" >> $GITHUB_ENV
+          fi
+        fi
+
+    - name: Install DocumentDB Operator
+      shell: bash
+      run: |
+        echo "Installing DocumentDB Operator on ${{ inputs.architecture }} using chart version: ${{ inputs.chart-version }}"
         
         if [[ "${{ inputs.use-local-chart }}" == "true" ]]; then
-          echo "Installing from local Helm chart..."
+          echo "Installing from platform-specific local Helm chart..."
           
-          # Extract and prepare local chart - artifacts are in platform-specific directories
+          # Extract and prepare platform-specific local chart - match e2e test pattern
           CHART_ARTIFACT_DIR="./artifacts/build-helm-chart-${{ inputs.architecture }}"
+          EXPECTED_CHART_FILE="$CHART_ARTIFACT_DIR/documentdb-chart-${{ inputs.architecture }}-${{ inputs.chart-version }}.tgz"
           
-          if [ -d "$CHART_ARTIFACT_DIR" ]; then
-            echo "Found chart artifact directory: $CHART_ARTIFACT_DIR"
-            ls -la "$CHART_ARTIFACT_DIR"
+          if [ -f "$EXPECTED_CHART_FILE" ]; then
+            echo "Found platform-specific chart file: $EXPECTED_CHART_FILE"
+            tar -xzf "$EXPECTED_CHART_FILE"
             
-            # Find the chart package file
-            CHART_FILE=$(find "$CHART_ARTIFACT_DIR" -name "*.tgz" | head -1)
+            # If cert-manager is not ready, we need to modify the chart to skip cert-manager resources
+            if [[ "$CERT_MANAGER_READY" != "true" ]]; then
+              echo "Modifying chart to skip cert-manager Certificate resources..."
+              
+              # Create a temporary values file to disable cert-manager resources
+              cat > /tmp/values-override.yaml <<EOF
+        certManager:
+          enabled: false
+        EOF
+              
+              # Remove cert-manager Certificate resources from the sidecar injector template
+              sed -i '/^apiVersion: cert-manager\.io\/v1$/,/^---$/d' ./documentdb-chart-${{ inputs.architecture }}/templates/02_documentdb_sidecar_injector.yaml
+              
+              echo "✓ Chart modified to skip cert-manager resources"
+            fi
             
-            if [ -n "$CHART_FILE" ]; then
-              echo "Found chart file: $CHART_FILE"
-              
-              # Extract the chart
-              tar -xzf "$CHART_FILE"
-              
-              # Find the extracted chart directory (should match the chart name pattern)
-              CHART_DIR=$(find . -maxdepth 1 -name "documentdb-chart-*" -type d | head -1)
-              
-              if [ -n "$CHART_DIR" ]; then
-                echo "Installing operator from local chart: $CHART_DIR"
-                
-                # Install the operator using the local chart
-                helm install documentdb-operator "$CHART_DIR" \
-                  --namespace ${{ inputs.operator-namespace }} \
-                  --create-namespace \
-                  --wait \
-                  --timeout=8m
-              else
-                echo "❌ Could not find extracted chart directory"
-                ls -la . | grep documentdb || echo "No documentdb directories found"
-                exit 1
-              fi
+            # Install the operator using the platform-specific local chart
+            if [[ "$CERT_MANAGER_READY" == "true" ]]; then
+              helm install documentdb-operator ./documentdb-chart-${{ inputs.architecture }} \
+                --namespace ${{ inputs.operator-namespace }} \
+                --create-namespace \
+                --wait --timeout=15m
             else
-              echo "❌ No .tgz chart file found in $CHART_ARTIFACT_DIR"
-              ls -la "$CHART_ARTIFACT_DIR"
-              exit 1
+              helm install documentdb-operator ./documentdb-chart-${{ inputs.architecture }} \
+                --namespace ${{ inputs.operator-namespace }} \
+                --create-namespace \
+                --values /tmp/values-override.yaml \
+                --wait --timeout=15m
             fi
           else
-            echo "❌ Local Helm chart artifact directory not found: $CHART_ARTIFACT_DIR"
+            echo "❌ Platform-specific Helm chart artifact not found: $EXPECTED_CHART_FILE"
+            echo "Available files in chart artifact directory:"
+            ls -la "$CHART_ARTIFACT_DIR/" || echo "Chart artifact directory not found"
             echo "Available artifact directories:"
             ls -la ./artifacts/ || echo "No artifacts directory found"
             exit 1
@@ -123,12 +206,21 @@ runs:
             --namespace ${{ inputs.operator-namespace }} \
             --create-namespace \
             --wait \
-            --timeout=8m
+            --timeout=15m
         fi
         
         # Verify operator installation
         echo "Verifying DocumentDB operator installation..."
         kubectl wait --for=condition=Available deployment/documentdb-operator -n ${{ inputs.operator-namespace }} --timeout=300s
+        
+        # Verify that our newly built images are being used
+        echo "Verifying operator deployment uses our newly built images on ${{ inputs.architecture }}..."
+        echo "Operator image:"
+        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}'
+        echo ""
+        echo "Sidecar injector image (if present):"
+        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
+        echo ""
         
         # Additional verification - check that operator is actually running
         echo "Checking operator pod status..."

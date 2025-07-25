@@ -189,6 +189,30 @@ jobs:
         repository-owner: ${{ github.repository_owner }}
         use-local-chart: 'true'
 
+    - name: Create DocumentDB credentials secret
+      run: |
+        echo "Creating DocumentDB credentials secret for ${{ matrix.architecture }}..."
+        
+        # Create the namespace first
+        kubectl create namespace ${{ env.DB_NS }} --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Create the credentials secret as required by the sidecar injector plugin
+        # Based on the documentation: the plugin requires a secret named 'documentdb-credentials'
+        # with 'username' and 'password' keys
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: documentdb-credentials
+          namespace: ${{ env.DB_NS }}
+        type: Opaque
+        stringData:
+          username: ${{ env.DB_USERNAME }}
+          password: ${{ env.DB_PASSWORD }}
+        EOF
+        
+        echo "✓ DocumentDB credentials secret created successfully"
+
     - name: Deploy DocumentDB cluster
       uses: ./.github/actions/deploy-documentdb
       with:
