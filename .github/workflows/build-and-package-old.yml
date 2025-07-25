@@ -25,12 +25,9 @@ on:
       chart_version:
         description: 'Built chart version'
         value: ${{ inputs.push_to_registry && jobs.create-helm-chart.outputs.chart_version || jobs.create-helm-chart-artifact.outputs.chart_version }}
-      operator_manifest_digest:
-        description: 'Operator image manifest digest'
-        value: ${{ jobs.create-manifest.outputs.operator_manifest_digest }}
-      sidecar_manifest_digest:
-        description: 'Sidecar image manifest digest'
-        value: ${{ jobs.create-manifest.outputs.sidecar_manifest_digest }}
+      image_digest:
+        description: 'Image manifest digest'
+        value: ${{ jobs.create-manifest.outputs.manifest_digest }}
 
 permissions:
   packages: write
@@ -38,6 +35,8 @@ permissions:
   id-token: write
 
 env:
+  OPERATOR_IMAGE_NAME: documentdb-kubernetes-operator/operator
+  SIDECAR_IMAGE_NAME: documentdb-kubernetes-operator/sidecar
   IMAGE_TAG: ${{ inputs.image_tag_prefix }}-${{ github.run_id }}
   CHART_NAME: documentdb-chart
   CHART_VERSION: ${{ inputs.chart_version_prefix }}-${{ github.run_id }}
@@ -50,15 +49,6 @@ jobs:
     strategy:
       matrix:
         arch: [amd64, arm64]
-        image:
-          - name: operator
-            dockerfile: Dockerfile
-            context: .
-            image_path: documentdb-kubernetes-operator/operator
-          - name: sidecar
-            dockerfile: plugins/sidecar-injector/Dockerfile
-            context: plugins/sidecar-injector/
-            image_path: documentdb-kubernetes-operator/sidecar
         include:
           - arch: amd64
             base_arch: AMD64
@@ -67,6 +57,9 @@ jobs:
             base_arch: ARM64
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
+    outputs:
+      image-digest-amd64: ${{ steps.build-amd64.outputs.digest }}
+      image-digest-arm64: ${{ steps.build-arm64.outputs.digest }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -74,75 +67,68 @@ jobs:
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
     
-    - name: Build and Push ${{ matrix.image.name }} ${{ matrix.arch }} Image
+    - name: Build and Push AMD64 Image
+      if: matrix.arch == 'amd64'
+      id: build-amd64
       run: |
-        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
-        echo "Building ${{ matrix.image.name }} for ${{ matrix.arch }} architecture..."
+        TAG=${{ env.IMAGE_TAG }}-amd64
         docker build \
-          --build-arg ARCH=${{ matrix.base_arch }} \
-          -t ghcr.io/${{ github.repository_owner }}/${{ matrix.image.image_path }}:$TAG \
-          -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
+          --build-arg ARCH=AMD64 \
+          -t ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:$TAG \
+          -f Dockerfile .
+        docker push ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:$TAG
+
+        # Get digest for attestation
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:$TAG | cut -d'@' -f2)
+        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
+    - name: Build and Push ARM64 Image
+      if: matrix.arch == 'arm64'
+      id: build-arm64
+      run: |
+        TAG=${{ env.IMAGE_TAG }}-arm64
+        docker build \
+          --build-arg ARCH=ARM64 \
+          -t ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:$TAG \
+          -f Dockerfile .
+        docker push ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:$TAG
         
-        echo "Pushing ${{ matrix.image.name }} image..."
-        docker push ghcr.io/${{ github.repository_owner }}/${{ matrix.image.image_path }}:$TAG
-        
-        echo "✓ ${{ matrix.image.name }} ${{ matrix.arch }} image built and pushed successfully"
+        # Get digest for attestation
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:$TAG | cut -d'@' -f2)
+        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
   create-manifest:
-    name: Create Docker Manifests
+    name: Create Docker Manifest
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     needs: build-and-push
     if: ${{ inputs.push_to_registry }}
     outputs:
-      operator_manifest_digest: ${{ steps.operator-manifest.outputs.digest }}
-      sidecar_manifest_digest: ${{ steps.sidecar-manifest.outputs.digest }}
+      manifest_digest: ${{ steps.manifest.outputs.digest }}
       image_tag: ${{ env.IMAGE_TAG }}
     steps:
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
     
-    - name: Create and Push Operator Manifest
-      id: operator-manifest
+    - name: Create and Push Manifest
+      id: manifest
       run: |
-        echo "Creating multi-architecture manifest for operator..."
-        docker manifest create ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }} \
-          --amend ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-amd64 \
-          --amend ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-arm64
+        echo "Creating multi-architecture manifest for amd64 and arm64..."
+        docker manifest create ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+          --amend ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-amd64 \
+          --amend ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-arm64
 
-        echo "Pushing operator multi-architecture manifest..."
-        docker manifest push ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}
+        echo "Pushing multi-architecture manifest..."
+        docker manifest push ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
         
         # Get manifest digest
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }} | awk '/^Digest:/ { print $2 }')
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | awk '/^Digest:/ { print $2 }')
         echo "digest=$DIGEST" >> $GITHUB_OUTPUT
         
-        echo "✓ Operator multi-arch manifest created and pushed successfully"
-
-    - name: Create and Push Sidecar Manifest
-      id: sidecar-manifest
-      run: |
-        echo "Creating multi-architecture manifest for sidecar..."
-        docker manifest create ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }} \
-          --amend ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-amd64 \
-          --amend ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-arm64
-
-        echo "Pushing sidecar multi-architecture manifest..."
-        docker manifest push ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}
-        
-        # Get manifest digest
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }} | awk '/^Digest:/ { print $2 }')
-        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-        
-        echo "✓ Sidecar multi-arch manifest created and pushed successfully"
-
-    - name: Verify multi-arch manifests
-      run: |
-        echo "Verifying operator multi-architecture manifest:"
-        docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}
-        
-        echo "Verifying sidecar multi-architecture manifest:"
-        docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}
+        # Verify multi-arch manifest
+        echo "Verifying multi-architecture manifest:"
+        docker buildx imagetools inspect ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        echo "✓ Multi-arch manifest created and pushed successfully"
 
   create-helm-chart:
     name: Create and Push Helm Chart
@@ -160,15 +146,11 @@ jobs:
     - name: Set up Helm
       uses: azure/setup-helm@v4
 
-    - name: Update Helm chart with new images
+    - name: Update Helm chart with new image
       run: |
         # Update the operator image tag and repository in values.yaml
         sed -i '/documentdbk8soperator:/,/tag:/ s|tag:.*|tag: \"${{ env.IMAGE_TAG }}\"|' documentdb-chart/values.yaml
-        sed -i '/documentdbk8soperator:/,/repository:/ s|repository:.*|repository: \"ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator\"|' documentdb-chart/values.yaml
-        
-        # Update the sidecar image tag and repository in values.yaml
-        sed -i '/sidecarinjector:/,/tag:/ s|tag:.*|tag: \"${{ env.IMAGE_TAG }}\"|' documentdb-chart/values.yaml
-        sed -i '/sidecarinjector:/,/repository:/ s|repository:.*|repository: \"ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar\"|' documentdb-chart/values.yaml
+        sed -i '/documentdbk8soperator:/,/repository:/ s|repository:.*|repository: \"ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}\"|' documentdb-chart/values.yaml
         
         # Update Chart.yaml version to use proper semantic versioning
         sed -i "s|^version:.*|version: ${{ env.CHART_VERSION }}|g" documentdb-chart/Chart.yaml
@@ -176,7 +158,7 @@ jobs:
         echo "Updated Chart.yaml:"
         cat documentdb-chart/Chart.yaml
         
-        echo "Updated values.yaml (with multi-arch image references):"
+        echo "Updated values.yaml (with multi-arch image reference):"
         cat documentdb-chart/values.yaml
 
     - name: Package Helm chart
@@ -203,6 +185,8 @@ jobs:
     - name: Push Helm chart to GHCR
       id: push-chart
       run: |
+        # Push to the repository root, not with an additional path segment
+        # The package name should match the chart name from Chart.yaml
         CHART_PACKAGE="documentdb-operator-${{ env.CHART_VERSION }}.tgz"
         echo "Pushing chart package: $CHART_PACKAGE"
         OUTPUT=$(helm push $CHART_PACKAGE oci://ghcr.io/${{ github.repository_owner }})
@@ -210,29 +194,10 @@ jobs:
         echo "✓ Chart pushed successfully with multi-architecture image support"
 
   build-for-artifacts:
-    name: Build Docker Images for Artifacts
+    name: Build Docker Image for Artifact
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     if: ${{ !inputs.push_to_registry }}
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-        image:
-          - name: operator
-            dockerfile: Dockerfile
-            context: .
-            image_path: documentdb-kubernetes-operator/operator
-          - name: sidecar
-            dockerfile: plugins/sidecar-injector/Dockerfile
-            context: plugins/sidecar-injector/
-            image_path: documentdb-kubernetes-operator/sidecar
-        include:
-          - arch: amd64
-            base_arch: AMD64
-            runner: ubuntu-22.04
-          - arch: arm64
-            base_arch: ARM64
-            runner: ubuntu-22.04-arm
-    runs-on: ${{ matrix.runner }}
     outputs:
       image_tag: ${{ env.IMAGE_TAG }}
     steps:
@@ -242,29 +207,28 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build ${{ matrix.image.name }} Docker image for ${{ matrix.arch }}
+    - name: Build Docker image
       run: |
-        echo "Building ${{ matrix.image.name }} Docker image for ${{ matrix.arch }} architecture (no registry push)..."
+        echo "Building Docker image for artifact (no registry push)..."
         docker buildx build \
-          --platform linux/${{ matrix.arch }} \
-          --build-arg ARCH=${{ matrix.base_arch }} \
-          --tag ghcr.io/${{ github.repository_owner }}/${{ matrix.image.image_path }}:${{ env.IMAGE_TAG }}-${{ matrix.arch }} \
+          --platform linux/amd64 \
+          --tag ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
           --load \
-          -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
+          .
         
-        echo "✓ ${{ matrix.image.name }} Docker image built successfully for ${{ matrix.arch }}"
+        echo "✓ Docker image built successfully"
 
     - name: Save Docker image as artifact
       run: |
-        echo "Saving ${{ matrix.image.name }} ${{ matrix.arch }} Docker image as tar file..."
-        docker save ghcr.io/${{ github.repository_owner }}/${{ matrix.image.image_path }}:${{ env.IMAGE_TAG }}-${{ matrix.arch }} > ${{ matrix.image.name }}-${{ matrix.arch }}-image.tar
-        echo "✓ ${{ matrix.image.name }} ${{ matrix.arch }} Docker image saved to tar file"
+        echo "Saving Docker image as tar file..."
+        docker save ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} > documentdb-operator-image.tar
+        echo "✓ Docker image saved to tar file"
 
     - name: Upload Docker image artifact
       uses: actions/upload-artifact@v4
       with:
-        name: build-docker-${{ matrix.image.name }}-${{ matrix.arch }}
-        path: ${{ matrix.image.name }}-${{ matrix.arch }}-image.tar
+        name: build-docker-image
+        path: documentdb-operator-image.tar
         retention-days: 1
 
   create-helm-chart-artifact:
@@ -282,15 +246,11 @@ jobs:
     - name: Set up Helm
       uses: azure/setup-helm@v4
 
-    - name: Update Helm chart with local image references
+    - name: Update Helm chart with local image reference
       run: |
         # Update the operator image tag and repository in values.yaml to use our locally built image
         sed -i '/documentdbk8soperator:/,/tag:/ s|tag:.*|tag: \"${{ env.IMAGE_TAG }}\"|' documentdb-chart/values.yaml
-        sed -i '/documentdbk8soperator:/,/repository:/ s|repository:.*|repository: \"ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator\"|' documentdb-chart/values.yaml
-        
-        # Update the sidecar image tag and repository in values.yaml
-        sed -i '/sidecarinjector:/,/tag:/ s|tag:.*|tag: \"${{ env.IMAGE_TAG }}\"|' documentdb-chart/values.yaml
-        sed -i '/sidecarinjector:/,/repository:/ s|repository:.*|repository: \"ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar\"|' documentdb-chart/values.yaml
+        sed -i '/documentdbk8soperator:/,/repository:/ s|repository:.*|repository: \"ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}\"|' documentdb-chart/values.yaml
         
         # Update Chart.yaml version
         sed -i "s|^version:.*|version: ${{ env.CHART_VERSION }}|g" documentdb-chart/Chart.yaml
@@ -298,7 +258,7 @@ jobs:
         echo "Updated Chart.yaml:"
         cat documentdb-chart/Chart.yaml
         
-        echo "Updated values.yaml (with local image references):"
+        echo "Updated values.yaml (with local image reference):"
         cat documentdb-chart/values.yaml
 
     - name: Package Helm chart
@@ -343,11 +303,11 @@ jobs:
         
         if [[ "${{ inputs.push_to_registry }}" == "true" ]]; then
           echo "### Built Artifacts (Registry):" >> $GITHUB_STEP_SUMMARY
-          echo "- **Multi-Arch Operator Image**: \`ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}\` (amd64 + arm64)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Multi-Arch Sidecar Image**: \`ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}\` (amd64 + arm64)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Helm Chart**: \`oci://ghcr.io/${{ github.repository_owner }}/documentdb-operator:${{ env.CHART_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Operator Manifest Digest**: \`${{ needs.create-manifest.outputs.operator_manifest_digest }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Sidecar Manifest Digest**: \`${{ needs.create-manifest.outputs.sidecar_manifest_digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Multi-Arch Docker Image**: \`ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}\` (amd64 + arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "- **AMD64 Image**: \`ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-amd64\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **ARM64 Image**: \`ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}-arm64\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Helm Chart**: \`oci://ghcr.io/${{ github.repository_owner }}/${{ env.CHART_NAME }}:${{ env.CHART_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Manifest Digest**: \`${{ needs.create-manifest.outputs.manifest_digest }}\`" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Job Results:" >> $GITHUB_STEP_SUMMARY
@@ -356,8 +316,7 @@ jobs:
           echo "- **Chart**: ${{ needs.create-helm-chart.result }}" >> $GITHUB_STEP_SUMMARY
         else
           echo "### Built Artifacts (Local/Artifacts):" >> $GITHUB_STEP_SUMMARY
-          echo "- **Operator Images**: Built for AMD64 and ARM64 (saved as artifacts)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Sidecar Images**: Built for AMD64 and ARM64 (saved as artifacts)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Image**: \`ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}\` (saved as artifact)" >> $GITHUB_STEP_SUMMARY
           echo "- **Helm Chart**: \`${{ env.CHART_VERSION }}\` (saved as artifact)" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -365,3 +324,5 @@ jobs:
           echo "- **Build Artifacts**: ${{ needs.build-for-artifacts.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart Artifacts**: ${{ needs.create-helm-chart-artifact.result }}" >> $GITHUB_STEP_SUMMARY
         fi
+
+        
