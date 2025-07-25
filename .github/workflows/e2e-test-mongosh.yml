@@ -222,49 +222,6 @@ jobs:
         
         echo "✓ Cluster resource check completed for ${{ matrix.architecture }}"
 
-    - name: Pre-load cert-manager images (optional)
-      continue-on-error: true
-      run: |
-        echo "Attempting to pre-load cert-manager images (optional step)..."
-        
-        # Define cert-manager version
-        CERT_MANAGER_VERSION="v1.15.3"
-        
-        # Try to pull cert-manager images (this may fail due to network issues)
-        echo "Attempting to pull cert-manager images from quay.io..."
-        
-        # Use a timeout for each pull operation
-        timeout 60 docker pull quay.io/jetstack/cert-manager-controller:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull controller image"
-        timeout 60 docker pull quay.io/jetstack/cert-manager-webhook:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull webhook image"
-        timeout 60 docker pull quay.io/jetstack/cert-manager-cainjector:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull cainjector image"
-        timeout 60 docker pull quay.io/jetstack/cert-manager-startupapicheck:$CERT_MANAGER_VERSION || echo "⚠️ Failed to pull startupapicheck image"
-        
-        # Load images into kind cluster if they were pulled successfully
-        echo "Loading available cert-manager images into kind cluster..."
-        
-        # Check if images exist before loading
-        if docker images | grep -q "quay.io/jetstack/cert-manager-controller.*$CERT_MANAGER_VERSION"; then
-          kind load docker-image quay.io/jetstack/cert-manager-controller:$CERT_MANAGER_VERSION \
-            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load controller image"
-        fi
-        
-        if docker images | grep -q "quay.io/jetstack/cert-manager-webhook.*$CERT_MANAGER_VERSION"; then
-          kind load docker-image quay.io/jetstack/cert-manager-webhook:$CERT_MANAGER_VERSION \
-            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load webhook image"
-        fi
-        
-        if docker images | grep -q "quay.io/jetstack/cert-manager-cainjector.*$CERT_MANAGER_VERSION"; then
-          kind load docker-image quay.io/jetstack/cert-manager-cainjector:$CERT_MANAGER_VERSION \
-            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load cainjector image"
-        fi
-        
-        if docker images | grep -q "quay.io/jetstack/cert-manager-startupapicheck.*$CERT_MANAGER_VERSION"; then
-          kind load docker-image quay.io/jetstack/cert-manager-startupapicheck:$CERT_MANAGER_VERSION \
-            --name documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }} || echo "Failed to load startupapicheck image"
-        fi
-          
-        echo "✓ cert-manager image pre-loading completed (some images may not have been loaded due to network issues)"
-
     - name: Install cert-manager
       run: |
         echo "Installing cert-manager on ${{ matrix.architecture }}..."
