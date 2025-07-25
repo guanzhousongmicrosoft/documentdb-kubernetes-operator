@@ -89,24 +89,46 @@ runs:
     - name: Download and load Docker images
       shell: bash
       run: |
-        echo "Loading platform-specific Docker images from artifacts..."
+        echo "Loading platform-specific Docker images from artifacts for ${{ inputs.architecture }}..."
         cd ./artifacts
         
         # Load the platform-specific images for the current architecture
         if [ -f build-platform-images/platform-specific-images.tar ]; then
-          echo "Loading platform-specific Docker images..."
+          echo "Loading all platform-specific Docker images..."
           docker load < build-platform-images/platform-specific-images.tar
           echo "✓ Platform-specific Docker images loaded successfully"
         else
           echo "❌ Platform-specific Docker images artifact not found"
           ls -la build-platform-images/ || echo "Directory not found"
+          echo "Available artifact directories:"
+          ls -la . || echo "No artifacts directory"
           exit 1
         fi
         
-        # Verify images were loaded and show available tags
+        # Verify the correct architecture images are available
         echo "Available Docker images:"
         docker images | grep documentdb-kubernetes-operator
-        echo "✓ Platform-specific Docker images loaded successfully"
+        
+        # Verify that the architecture-specific images exist
+        ARCH="${{ inputs.architecture }}"
+        OPERATOR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/operator:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        SIDECAR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/sidecar:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        
+        echo "Checking for required images for $ARCH architecture:"
+        echo "  Operator: $OPERATOR_IMAGE"
+        echo "  Sidecar: $SIDECAR_IMAGE"
+        
+        if ! docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "$OPERATOR_IMAGE"; then
+          echo "❌ Required operator image not found: $OPERATOR_IMAGE"
+          exit 1
+        fi
+        
+        if ! docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "$SIDECAR_IMAGE"; then
+          echo "❌ Required sidecar image not found: $SIDECAR_IMAGE"
+          exit 1
+        fi
+        
+        echo "✓ All required Docker images for $ARCH architecture are available"
 
     - name: Install system dependencies
       shell: bash

@@ -72,8 +72,8 @@ jobs:
             instances_per_node: 1
     
     env:
-      # Use outputs from the build workflow with platform-specific images
-      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}-${{ matrix.architecture }}
+      # Use outputs from the build workflow with base image tag (architecture will be added by the action)
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version }}
     
     steps:
