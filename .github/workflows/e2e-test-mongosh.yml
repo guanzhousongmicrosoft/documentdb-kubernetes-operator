@@ -59,7 +59,6 @@ jobs:
     
     strategy:
       matrix:
-        arch: [amd64, arm64]
         include:
           - architecture: amd64
             runner: ubuntu-22.04
@@ -115,46 +114,34 @@ jobs:
 
     - name: Load Docker images from artifacts
       run: |
-        echo "Loading Docker images from artifacts on ${{ matrix.architecture }}..."
+        echo "Loading multi-platform Docker images from artifacts..."
         cd ./artifacts
         
-        # Find and load the operator Docker image tar file for the current architecture
-        if [ -f build-docker-operator-${{ matrix.architecture }}/operator-${{ matrix.architecture }}-image.tar ]; then
-          echo "Loading operator Docker image for ${{ matrix.architecture }}..."
-          docker load < build-docker-operator-${{ matrix.architecture }}/operator-${{ matrix.architecture }}-image.tar
-          
-          # Tag the architecture-specific image with the generic tag for consistency
-          docker tag ghcr.io/${{ github.repository_owner }}/${{ env.OPERATOR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}-${{ matrix.architecture }} \
-                     ghcr.io/${{ github.repository_owner }}/${{ env.OPERATOR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          
-          echo "✓ Operator Docker image loaded successfully from artifact"
+        # Load the multi-platform images that contain both AMD64 and ARM64 architectures
+        if [ -f build-multiplatform-images/operator-multiplatform-image.tar ]; then
+          echo "Loading multi-platform operator Docker image..."
+          docker load < build-multiplatform-images/operator-multiplatform-image.tar
+          echo "✓ Multi-platform operator Docker image loaded successfully"
         else
-          echo "❌ Operator Docker image artifact not found for ${{ matrix.architecture }}"
-          echo "Looking for: build-docker-operator-${{ matrix.architecture }}/operator-${{ matrix.architecture }}-image.tar"
-          ls -la build-docker-operator-${{ matrix.architecture }}/ || echo "Directory not found"
+          echo "❌ Multi-platform operator Docker image artifact not found"
+          ls -la build-multiplatform-images/ || echo "Directory not found"
           exit 1
         fi
         
-        # Find and load the sidecar Docker image tar file for the current architecture
-        if [ -f build-docker-sidecar-${{ matrix.architecture }}/sidecar-${{ matrix.architecture }}-image.tar ]; then
-          echo "Loading sidecar Docker image for ${{ matrix.architecture }}..."
-          docker load < build-docker-sidecar-${{ matrix.architecture }}/sidecar-${{ matrix.architecture }}-image.tar
-          
-          # Tag the architecture-specific image with the generic tag for consistency
-          docker tag ghcr.io/${{ github.repository_owner }}/${{ env.SIDECAR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}-${{ matrix.architecture }} \
-                     ghcr.io/${{ github.repository_owner }}/${{ env.SIDECAR_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          
-          echo "✓ Sidecar Docker image loaded successfully from artifact"
+        if [ -f build-multiplatform-images/sidecar-multiplatform-image.tar ]; then
+          echo "Loading multi-platform sidecar Docker image..."
+          docker load < build-multiplatform-images/sidecar-multiplatform-image.tar
+          echo "✓ Multi-platform sidecar Docker image loaded successfully"
         else
-          echo "❌ Sidecar Docker image artifact not found for ${{ matrix.architecture }}"
-          echo "Looking for: build-docker-sidecar-${{ matrix.architecture }}/sidecar-${{ matrix.architecture }}-image.tar"
-          ls -la build-docker-sidecar-${{ matrix.architecture }}/ || echo "Directory not found"
+          echo "❌ Multi-platform sidecar Docker image artifact not found"
+          ls -la build-multiplatform-images/ || echo "Directory not found"
           exit 1
         fi
         
-        # Verify images were loaded
+        # Verify images were loaded and show available tags
+        echo "Available Docker images:"
         docker images | grep documentdb-kubernetes-operator
-        echo "✓ All Docker images loaded successfully from artifacts for ${{ matrix.architecture }}"
+        echo "✓ All multi-platform Docker images loaded successfully"
 
     - name: Set up Python
       uses: actions/setup-python@v4
