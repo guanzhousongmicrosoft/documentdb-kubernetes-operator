@@ -237,9 +237,14 @@ jobs:
 
           ## Supported Platforms
 
-          - Linux: amd64, arm64, arm
-          - macOS: amd64 (Intel), arm64 (Apple Silicon)
-          - Windows: amd64, arm64
+          | Platform | Download |
+          |----------|----------|
+          | Linux AMD64 | [kubectl-documentdb-linux-amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-linux-amd64.tar.gz) |
+          | Linux ARM64 | [kubectl-documentdb-linux-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-linux-arm64.tar.gz) |
+          | macOS AMD64 (Intel) | [kubectl-documentdb-darwin-amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-darwin-amd64.tar.gz) |
+          | macOS ARM64 (Apple Silicon) | [kubectl-documentdb-darwin-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-darwin-arm64.tar.gz) |
+          | Windows AMD64 | [kubectl-documentdb-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-amd64.zip) |
+          | Windows ARM64 | [kubectl-documentdb-windows-arm64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-arm64.zip) |
 
           ## Installation
 
