@@ -4,20 +4,59 @@ The `kubectl documentdb` plugin provides operational tooling for Azure Cosmos DB
 
 ## Installation
 
-Prebuilt archives are produced by the release workflow under `dist/kubectl-documentdb/` (GitHub Actions download). Each archive contains a platform-specific binary plus this project's MIT license. To install:
+### Using Pre-built Binaries
 
-1. Download the archive that matches your operating system and CPU architecture.
-2. Extract the archive and place the `kubectl-documentdb` binary somewhere on your `PATH` (for example `~/.local/bin`).
-3. Ensure the binary is executable (`chmod +x ~/.local/bin/kubectl-documentdb` on Linux and macOS).
+Download the latest release from the [GitHub releases page](https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases) for your platform:
 
-To build from source:
-
+#### Linux (AMD64)
 ```bash
-make build-kubectl-plugin           # builds bin/kubectl-documentdb for the host platform
-make package-kubectl-plugin         # creates release archives for all supported platforms
+curl -LO https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases/latest/download/kubectl-documentdb-linux-amd64.tar.gz
+tar xzf kubectl-documentdb-linux-amd64.tar.gz
+chmod +x kubectl-documentdb
+sudo mv kubectl-documentdb /usr/local/bin/
 ```
 
-Copy `bin/kubectl-documentdb` onto your `PATH` (renaming is not required). Verify installation with `kubectl documentdb --help`.
+#### Linux (ARM64)
+```bash
+curl -LO https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases/latest/download/kubectl-documentdb-linux-arm64.tar.gz
+tar xzf kubectl-documentdb-linux-arm64.tar.gz
+chmod +x kubectl-documentdb
+sudo mv kubectl-documentdb /usr/local/bin/
+```
+
+#### macOS (Intel)
+```bash
+curl -LO https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases/latest/download/kubectl-documentdb-darwin-amd64.tar.gz
+tar xzf kubectl-documentdb-darwin-amd64.tar.gz
+chmod +x kubectl-documentdb
+sudo mv kubectl-documentdb /usr/local/bin/
+```
+
+#### macOS (Apple Silicon)
+```bash
+curl -LO https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases/latest/download/kubectl-documentdb-darwin-arm64.tar.gz
+tar xzf kubectl-documentdb-darwin-arm64.tar.gz
+chmod +x kubectl-documentdb
+sudo mv kubectl-documentdb /usr/local/bin/
+```
+
+#### Windows (PowerShell)
+```powershell
+Invoke-WebRequest -Uri "https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases/latest/download/kubectl-documentdb-windows-amd64.zip" -OutFile "kubectl-documentdb.zip"
+Expand-Archive kubectl-documentdb.zip
+Move-Item kubectl-documentdb\kubectl-documentdb.exe C:\Windows\System32\
+```
+
+### Building from Source
+
+```bash
+cd plugins/documentdb-kubectl-plugin
+make build              # builds kubectl-documentdb for the host platform
+make build-all          # creates binaries for all supported platforms
+make install            # builds and installs to /usr/local/bin
+```
+
+Verify installation with `kubectl documentdb --help`.
 
 ## Supported Commands
 
@@ -56,6 +95,33 @@ The plugin never modifies kubeconfig files; it only reads them through `client-g
 - If you see context lookup errors, verify the context name exists via `kubectl config get-contexts` and matches the cluster list entry.
 - Promotion waits until `status.status` reports a healthy phase on both hub and target contexts. Use `--poll-interval` and `--wait-timeout` to tune.
 
+## Supported Platforms
+
+The plugin is released for the following platforms and architectures:
+
+- **Linux**: amd64, arm64, arm
+- **macOS**: amd64 (Intel), arm64 (Apple Silicon)
+- **Windows**: amd64, arm64
+
+All releases include SHA256 checksums for verification.
+
+## Verifying Downloads
+
+Each release includes SHA256 checksums. Verify your download:
+
+```bash
+# Download checksum file
+curl -LO https://github.com/guanzhousongmicrosoft/documentdb-kubernetes-operator/releases/latest/download/kubectl-documentdb-linux-amd64.tar.gz.sha256
+
+# Verify integrity
+sha256sum -c kubectl-documentdb-linux-amd64.tar.gz.sha256
+```
+
 ## Contributing
 
-The plugin is a standalone Go module located in `plugins/documentdb-kubectl-plugin`. Use the Makefile targets above to rebuild after code changes. Unit tests for the plugin should live alongside the command implementations under `plugins/documentdb-kubectl-plugin/cmd`.
+The plugin is a standalone Go module located in `plugins/documentdb-kubectl-plugin`. Use the Makefile targets to rebuild after code changes. Unit tests for the plugin should live alongside the command implementations under `plugins/documentdb-kubectl-plugin/cmd`.
+
+For detailed release instructions, see:
+- [Plugin README](../plugins/documentdb-kubectl-plugin/README.md)
+- [Release Guide](../plugins/documentdb-kubectl-plugin/RELEASE.md)
+- [Quick Start](../plugins/documentdb-kubectl-plugin/QUICKSTART.md)

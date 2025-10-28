@@ -1,0 +1,122 @@
+name: Test kubectl Plugin Build
+
+on:
+  pull_request:
+    paths:
+      - 'plugins/documentdb-kubectl-plugin/**'
+      - '.github/workflows/test-kubectl-plugin.yml'
+  push:
+    branches:
+      - main
+      - plugin-release
+    paths:
+      - 'plugins/documentdb-kubectl-plugin/**'
+      - '.github/workflows/test-kubectl-plugin.yml'
+
+jobs:
+  test-build:
+    name: Test Build kubectl-documentdb
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go-version: ['1.23.5']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Run tests
+        run: |
+          cd plugins/documentdb-kubectl-plugin
+          go test -v ./...
+
+      - name: Build binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd plugins/documentdb-kubectl-plugin
+          go build -o kubectl-documentdb .
+          chmod +x kubectl-documentdb
+          ./kubectl-documentdb version
+          ./kubectl-documentdb --help
+
+      - name: Build binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd plugins/documentdb-kubectl-plugin
+          go build -o kubectl-documentdb.exe .
+          .\kubectl-documentdb.exe version
+          .\kubectl-documentdb.exe --help
+
+      - name: Test Makefile (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd plugins/documentdb-kubectl-plugin
+          make clean
+          make build
+          ./kubectl-documentdb version
+
+  lint:
+    name: Lint kubectl-documentdb
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.5'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: plugins/documentdb-kubectl-plugin
+          args: --timeout=5m
+
+  verify-cross-compile:
+    name: Verify Cross Compilation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.5'
+
+      - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          cd plugins/documentdb-kubectl-plugin
+          BINARY_NAME="kubectl-documentdb"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          go build -o "${BINARY_NAME}" .
+          ls -lh "${BINARY_NAME}"

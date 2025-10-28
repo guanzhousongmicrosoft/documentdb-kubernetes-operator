@@ -1,0 +1,300 @@
+name: Release kubectl-documentdb Plugin
+
+on:
+  push:
+    branches:
+      - main
+      - plugin-release
+    tags:
+      - 'plugin-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-release:
+    name: Build and Release kubectl-documentdb
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - goos: linux
+            goarch: amd64
+            platform: linux-amd64
+          - goos: linux
+            goarch: arm64
+            platform: linux-arm64
+          - goos: linux
+            goarch: arm
+            goarm: 7
+            platform: linux-arm
+          
+          # macOS builds
+          - goos: darwin
+            goarch: amd64
+            platform: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            platform: darwin-arm64
+          
+          # Windows builds
+          - goos: windows
+            goarch: amd64
+            platform: windows-amd64
+          - goos: windows
+            goarch: arm64
+            platform: windows-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'plugins/documentdb-kubectl-plugin/go.mod'
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/plugin-}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Releasing version: ${VERSION}"
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: 0
+        run: |
+          cd plugins/documentdb-kubectl-plugin
+          
+          # Set binary name
+          BINARY_NAME="kubectl-documentdb"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="${BINARY_NAME}.exe"
+          fi
+          
+          # Build with version information
+          VERSION="${{ steps.version.outputs.version }}"
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          
+          go build -ldflags "${LDFLAGS}" -o "${BINARY_NAME}" .
+          
+          # Create archive
+          ARCHIVE_NAME="kubectl-documentdb-${{ matrix.platform }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "${ARCHIVE_NAME}.zip" "${BINARY_NAME}"
+          else
+            tar czf "${ARCHIVE_NAME}.tar.gz" "${BINARY_NAME}"
+          fi
+          
+          # Generate checksums
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            sha256sum "${ARCHIVE_NAME}.zip" > "${ARCHIVE_NAME}.zip.sha256"
+          else
+            sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubectl-documentdb-${{ matrix.platform }}
+          path: |
+            plugins/documentdb-kubectl-plugin/*.tar.gz
+            plugins/documentdb-kubectl-plugin/*.zip
+            plugins/documentdb-kubectl-plugin/*.sha256
+          retention-days: 5
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/plugin-}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=plugin-${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p ./release-assets
+          find ./artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.sha256" \) -exec cp {} ./release-assets/ \;
+          ls -lah ./release-assets/
+
+      - name: Generate installation instructions
+        run: |
+          cat > ./release-assets/INSTALL.md << 'EOF'
+          # kubectl-documentdb Installation Guide
+
+          ## Installation
+
+          ### Linux
+
+          **AMD64:**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-linux-amd64.tar.gz
+          tar xzf kubectl-documentdb-linux-amd64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          **ARM64:**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-linux-arm64.tar.gz
+          tar xzf kubectl-documentdb-linux-arm64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          ### macOS
+
+          **Intel (AMD64):**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-darwin-amd64.tar.gz
+          tar xzf kubectl-documentdb-darwin-amd64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          **Apple Silicon (ARM64):**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-darwin-arm64.tar.gz
+          tar xzf kubectl-documentdb-darwin-arm64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          ### Windows
+
+          **AMD64:**
+          1. Download [kubectl-documentdb-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-amd64.zip)
+          2. Extract the archive
+          3. Add the binary to your PATH
+
+          **PowerShell:**
+          ```powershell
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-amd64.zip" -OutFile "kubectl-documentdb.zip"
+          Expand-Archive -Path kubectl-documentdb.zip -DestinationPath .
+          Move-Item kubectl-documentdb.exe $env:USERPROFILE\bin\
+          ```
+
+          ## Verification
+
+          Verify the installation:
+          ```bash
+          kubectl documentdb --help
+          ```
+
+          ## Usage
+
+          The plugin provides the following commands:
+
+          - `kubectl documentdb status` - Check the status of DocumentDB clusters
+          - `kubectl documentdb promote` - Promote a DocumentDB cluster
+          - `kubectl documentdb events` - View events for DocumentDB resources
+
+          For detailed usage, run:
+          ```bash
+          kubectl documentdb <command> --help
+          ```
+          EOF
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > ./release-notes.md << 'EOF'
+          # kubectl-documentdb ${{ steps.version.outputs.version }}
+
+          kubectl plugin for managing Azure Cosmos DB for MongoDB (DocumentDB) clusters in Kubernetes.
+
+          ## What's New
+
+          - Multi-platform support: Linux, macOS, and Windows
+          - Multi-architecture: AMD64, ARM64, and ARM
+
+          ## Supported Platforms
+
+          - Linux: amd64, arm64, arm
+          - macOS: amd64 (Intel), arm64 (Apple Silicon)
+          - Windows: amd64, arm64
+
+          ## Installation
+
+          See [INSTALL.md](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/INSTALL.md) for detailed installation instructions.
+
+          ## Checksums
+
+          SHA256 checksums are provided for all binaries. Verify your download:
+
+          ```bash
+          sha256sum -c kubectl-documentdb-<platform>.tar.gz.sha256
+          ```
+
+          ## Quick Start
+
+          ```bash
+          # Check cluster status
+          kubectl documentdb status -n <namespace> <cluster-name>
+
+          # View events
+          kubectl documentdb events -n <namespace> <cluster-name>
+
+          # Promote a cluster
+          kubectl documentdb promote -n <namespace> <cluster-name>
+          ```
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: kubectl-documentdb ${{ steps.version.outputs.version }}
+          body_path: ./release-notes.md
+          draft: false
+          prerelease: false
+          files: |
+            ./release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Released Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ls -1 ./release-assets/ | while read file; do
+            echo "- $file" >> $GITHUB_STEP_SUMMARY
+          done
