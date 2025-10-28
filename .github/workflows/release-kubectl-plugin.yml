@@ -248,7 +248,64 @@ jobs:
 
           ## Installation
 
-          See [INSTALL.md](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/INSTALL.md) for detailed installation instructions.
+          ### Linux
+
+          **AMD64:**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-linux-amd64.tar.gz
+          tar xzf kubectl-documentdb-linux-amd64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          **ARM64:**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-linux-arm64.tar.gz
+          tar xzf kubectl-documentdb-linux-arm64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          ### macOS
+
+          **Intel (AMD64):**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-darwin-amd64.tar.gz
+          tar xzf kubectl-documentdb-darwin-amd64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          **Apple Silicon (ARM64):**
+          ```bash
+          curl -LO https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-darwin-arm64.tar.gz
+          tar xzf kubectl-documentdb-darwin-arm64.tar.gz
+          chmod +x kubectl-documentdb
+          sudo mv kubectl-documentdb /usr/local/bin/
+          ```
+
+          ### Windows
+
+          **AMD64:**
+          ```powershell
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-amd64.zip" -OutFile "kubectl-documentdb.zip"
+          Expand-Archive -Path kubectl-documentdb.zip -DestinationPath .
+          Move-Item kubectl-documentdb.exe $env:USERPROFILE\bin\
+          ```
+
+          **ARM64:**
+          ```powershell
+          Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-arm64.zip" -OutFile "kubectl-documentdb.zip"
+          Expand-Archive -Path kubectl-documentdb.zip -DestinationPath .
+          Move-Item kubectl-documentdb.exe $env:USERPROFILE\bin\
+          ```
+
+          ## Verification
+
+          Verify the installation:
+          ```bash
+          kubectl documentdb --help
+          ```
 
           ## Checksums
 
