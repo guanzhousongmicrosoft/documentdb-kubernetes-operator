@@ -246,7 +246,33 @@ jobs:
           | Windows AMD64 | [kubectl-documentdb-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-amd64.zip) |
           | Windows ARM64 | [kubectl-documentdb-windows-arm64.zip](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/kubectl-documentdb-windows-arm64.zip) |
 
-          ## Installation
+          ## Quick Install (Auto-detect Platform)
+
+          **Linux/macOS (One-liner):**
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-kubectl-documentdb-plugin.sh | bash
+          ```
+
+          Or with a specific version:
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-kubectl-documentdb-plugin.sh | bash -s -- ${{ steps.version.outputs.tag }}
+          ```
+
+          **Windows (PowerShell - Run as Administrator):**
+          ```powershell
+          irm https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-kubectl-documentdb-plugin.ps1 | iex
+          ```
+
+          Or with a specific version:
+          ```powershell
+          irm https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-kubectl-documentdb-plugin.ps1 | iex -ArgumentList "${{ steps.version.outputs.tag }}"
+          ```
+
+          **Download and run manually:**
+          - **Bash script:** [install-kubectl-documentdb-plugin.sh](https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-kubectl-documentdb-plugin.sh)
+          - **PowerShell script:** [install-kubectl-documentdb-plugin.ps1](https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install-kubectl-documentdb-plugin.ps1)
+
+          ## Manual Installation
 
           ### Linux
 
@@ -304,6 +330,7 @@ jobs:
 
           Verify the installation:
           ```bash
+          kubectl documentdb version
           kubectl documentdb --help
           ```
 
