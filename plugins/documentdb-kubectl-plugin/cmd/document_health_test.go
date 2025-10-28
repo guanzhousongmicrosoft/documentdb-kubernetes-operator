@@ -35,7 +35,9 @@ func TestIsDocumentReady(t *testing.T) {
 		t.Fatal("expected document to be not ready for cluster-b")
 	}
 
-	unstructured.SetNestedField(doc.Object, "failed", "status", "status")
+	if err := unstructured.SetNestedField(doc.Object, "failed", "status", "status"); err != nil {
+		t.Fatalf("failed to set status: %v", err)
+	}
 	if isDocumentReady(doc, "cluster-a") {
 		t.Fatal("expected document to be not ready when status indicates failure")
 	}

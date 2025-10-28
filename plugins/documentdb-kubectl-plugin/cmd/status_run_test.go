@@ -21,7 +21,8 @@ import (
 )
 
 func TestStatusRunRendersClusterTable(t *testing.T) {
-	t.Parallel()
+	// Note: This test modifies global variables (loadConfigFunc, dynamicClientForConfig, kubernetesClientForConfig)
+	// so it cannot run in parallel with other tests that might use these same globals.
 
 	prevLoad := loadConfigFunc
 	prevDynamic := dynamicClientForConfig
@@ -77,9 +78,14 @@ func TestStatusRunRendersClusterTable(t *testing.T) {
 	}
 
 	dynamicClientForConfig = func(cfg *rest.Config) (dynamic.Interface, error) {
+		if cfg == nil || cfg.Host == "" {
+			return nil, fmt.Errorf("invalid config: nil or empty host")
+		}
 		client, ok := dynamicClients[cfg.Host]
 		if !ok {
-			return nil, fmt.Errorf("no dynamic client for host %s", cfg.Host)
+			// If the host is not in our test clients, it might be from the actual kubeconfig
+			// In test mode, we should return an error to catch this
+			return nil, fmt.Errorf("no dynamic client for host %s (available: hub, cluster-a, cluster-b)", cfg.Host)
 		}
 		return client, nil
 	}
