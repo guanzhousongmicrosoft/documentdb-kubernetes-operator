@@ -32,10 +32,6 @@ jobs:
           - goos: linux
             goarch: arm64
             platform: linux-arm64
-          - goos: linux
-            goarch: arm
-            goarm: 7
-            platform: linux-arm
           
           # macOS builds
           - goos: darwin
@@ -77,7 +73,6 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm }}
           CGO_ENABLED: 0
         run: |
           cd plugins/documentdb-kubectl-plugin
