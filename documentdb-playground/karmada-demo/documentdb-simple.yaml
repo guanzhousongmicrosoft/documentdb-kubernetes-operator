@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-ns
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: demo-ns
+type: Opaque
+stringData:
+  username: demo_user
+  password: DemoPass123!
+
+---
+
+apiVersion: db.microsoft.com/preview
+kind: DocumentDB
+metadata:
+  name: demo-db
+  namespace: demo-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  resource:
+    storage:
+      pvcSize: 10Gi
+  environment: aks
+  clusterReplication:
+    highAvailability: true
+    crossCloudNetworkingStrategy: None
+    primary: CLUSTER_NAME
+    clusterList:
+      - name: member-eastus2
+        environment: aks
+      - name: member-westus3
+        environment: aks
+      - name: member-uksouth
+        environment: aks
+  logLevel: info

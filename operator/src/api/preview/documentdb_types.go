@@ -119,7 +119,7 @@ type StorageConfiguration struct {
 
 type ClusterReplication struct {
 	// CrossCloudNetworking determines which type of networking mechanics for the replication
-	// +kubebuilder:validation:Enum=AzureFleet;Istio;None
+	// +kubebuilder:validation:Enum=AzureFleet;Istio;Karmada;None
 	CrossCloudNetworkingStrategy string `json:"crossCloudNetworkingStrategy,omitempty"`
 	// Primary is the name of the primary cluster for replication.
 	Primary string `json:"primary"`

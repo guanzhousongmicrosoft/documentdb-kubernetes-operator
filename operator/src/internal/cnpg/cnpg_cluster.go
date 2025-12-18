@@ -39,8 +39,8 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 
 	return &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      req.Name,
-			Namespace: req.Namespace,
+			Name:      documentdb.Name,
+			Namespace: documentdb.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         documentdb.APIVersion,

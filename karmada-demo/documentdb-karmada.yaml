@@ -1,0 +1,65 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+---
+apiVersion: policy.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: documentdb-ns-policy
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - apiVersion: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+  placement:
+    clusterAffinity:
+      clusterNames:
+        - member-eastus2
+        - member-westus3
+        - member-uksouth
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: testuser
+  password: TestPassword123!
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: documentdb-credentials
+  resource:
+    storage:
+      pvcSize: 1Gi
+---
+apiVersion: policy.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: documentdb-resources-policy
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - apiVersion: v1
+      kind: Secret
+      name: documentdb-credentials
+    - apiVersion: documentdb.io/preview
+      kind: DocumentDB
+      name: documentdb-preview
+  placement:
+    clusterAffinity:
+      clusterNames:
+        - member-eastus2
+        - member-westus3
+        - member-uksouth

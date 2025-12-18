@@ -31,6 +31,7 @@ const (
 	None       crossCloudNetworkingStrategy = "None"
 	AzureFleet crossCloudNetworkingStrategy = "AzureFleet"
 	Istio      crossCloudNetworkingStrategy = "Istio"
+	Karmada    crossCloudNetworkingStrategy = "Karmada"
 )
 
 type replicationState int32
@@ -141,6 +142,9 @@ func (r ReplicationContext) GenerateExternalClusterServices(namespace string, fl
 			serviceName := other + "-rw." + namespace + ".svc"
 			if fleetEnabled {
 				serviceName = namespace + "-" + generateServiceName(other, r.Self, namespace) + ".fleet-system.svc"
+			} else if r.CrossCloudNetworkingStrategy == Karmada {
+				// Karmada uses Multi-Cluster Service (MCS) API pattern
+				serviceName = other + "-rw." + namespace + ".svc.clusterset.local"
 			}
 
 			if !yield(other, serviceName) {
@@ -148,6 +152,21 @@ func (r ReplicationContext) GenerateExternalClusterServices(namespace string, fl
 			}
 		}
 	}
+}
+
+// IsKarmadaNetworking returns true if Karmada multi-cluster networking is enabled
+func (r ReplicationContext) IsKarmadaNetworking() bool {
+	return r.CrossCloudNetworkingStrategy == Karmada
+}
+
+// IsAzureFleetNetworking returns true if Azure Fleet multi-cluster networking is enabled
+func (r ReplicationContext) IsAzureFleetNetworking() bool {
+	return r.CrossCloudNetworkingStrategy == AzureFleet
+}
+
+// IsIstioNetworking returns true if Istio multi-cluster networking is enabled
+func (r ReplicationContext) IsIstioNetworking() bool {
+	return r.CrossCloudNetworkingStrategy == Istio
 }
 
 // Create an iterator that yields outgoing service names, for use in a for each loop
@@ -234,12 +253,4 @@ func GetSelfName(ctx context.Context, client client.Client) (string, error) {
 		return "", fmt.Errorf("name key not found in kube-system:cluster-name configmap")
 	}
 	return self, nil
-}
-
-func (r *ReplicationContext) IsAzureFleetNetworking() bool {
-	return r.CrossCloudNetworkingStrategy == AzureFleet
-}
-
-func (r *ReplicationContext) IsIstioNetworking() bool {
-	return r.CrossCloudNetworkingStrategy == Istio
 }

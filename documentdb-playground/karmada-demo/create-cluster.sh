@@ -5,10 +5,10 @@
 
 set -e  # Exit on any error
 
-# Configuration
-CLUSTER_NAME="ray-ddb-cluster"
-RESOURCE_GROUP="ray-documentdb-rg"
-LOCATION="East US 2"
+# Configuration - Defaults for Karmada Demo
+CLUSTER_NAME="member-eastus2"
+RESOURCE_GROUP="karmada-demo-rg"
+LOCATION="eastus2"
 NODE_COUNT=2
 NODE_SIZE="Standard_D4s_v5"
 KUBERNETES_VERSION=""
@@ -67,6 +67,14 @@ while [[ $# -gt 0 ]]; do
             LOCATION="$2"
             shift 2
             ;;
+        --node-count)
+            NODE_COUNT="$2"
+            shift 2
+            ;;
+        --node-size)
+            NODE_SIZE="$2"
+            shift 2
+            ;;
         --github-username)
             GITHUB_USERNAME="$2"
             shift 2
@@ -89,6 +97,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --cluster-name NAME     AKS cluster name (default: documentdb-cluster)"
             echo "  --resource-group RG     Azure resource group (default: documentdb-rg)"
             echo "  --location LOCATION     Azure location (default: East US)"
+            echo "  --node-count COUNT      Number of nodes in cluster (default: 2)"
+            echo "  --node-size SIZE        VM size for nodes (default: Standard_D4s_v5)"
             echo "  --github-username       GitHub username for operator installation"
             echo "  --github-token          GitHub token for operator installation"
             echo "  -h, --help             Show this help message"
@@ -192,6 +202,7 @@ create_cluster() {
         AKS_CREATE_CMD="az aks create \
             --resource-group $RESOURCE_GROUP \
             --name $CLUSTER_NAME \
+            --location $LOCATION \
             --node-count $NODE_COUNT \
             --node-vm-size $NODE_SIZE"
         
