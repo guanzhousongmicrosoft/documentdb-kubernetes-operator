@@ -178,9 +178,7 @@ Karmada is installed successfully.
 
 ⏳ **If it takes longer than 10 minutes**: Check your internet connection for image downloads
 
-# Create the Kind cluster (takes ~30 seconds)
-kind create cluster --name karmada-host --config /tmp/kind-karmada.yaml
-Understanding Karmada Architecture**:
+# Understanding Karmada Architecture
 - **Kind cluster**: Hosts the Karmada components (just infrastructure)
 - **Karmada API server**: The control plane you interact with (runs inside Kind)
 - **Member clusters**: Your actual AKS clusters (we'll add these next)
@@ -233,7 +231,7 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config delete \
 # ═══════════════════════════════════════════════════════════
 echo "Installing DocumentDB CRDs on Karmada control plane..."
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f \
-  /Users/song/codebase/dko_111/operator/documentdb-helm-chart/crds/
+  /home/song/dko_111/operator/documentdb-helm-chart/crds/
 
 # ═══════════════════════════════════════════════════════════
 # Verification: Check installed CRDs
@@ -250,8 +248,9 @@ dbs.documentdb.io
 scheduledbackups.documentdb.io
 ```
 
-✅ **Success**: You see DocumentDB and CNPG CRDs listed.o -e "\nChecking Cluster API resource..."
+✅ **Success**: You see DocumentDB and CNPG CRDs listed.
 
+```
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config api-resources | grep "clusters.*cluster.karmada.io"
 ```
 
@@ -260,37 +259,7 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config api-resources | 
 clusters    cluster.karmada.io/v1alpha1    false    Cluster
 ```
 
-✅ **All verifications passed?** Karmada is ready! You now have a multi-cluster control plane running locally.mportant:** Karmada is a multi-cluster control plane, not a regular Kubernetes cluster. The Karmada components run in the Kind cluster, but you interact with Karmada through its API server.
-
-```bash
-# 1. Check if Kind cluster is running and has Karmada pods
-kubectl --context kind-karmada-host get pods -n karmada-system
-
-# Wait for all 7 pods to be Running (may take 2-3 minutes after init):
-# - etcd-0
-# - karmada-apiserver
-# - karmada-aggregated-apiserver
-# - karmada-controller-manager
-# - karmada-scheduler
-# - karmada-webhook
-# - kube-controller-manager
-
-# 2. Verify Karmada API server is accessible
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config cluster-info
-
-# Should show: Kubernetes control plane is running at https://127.0.0.1:32443
-
-# 3. Verify Karmada CRDs are installed (this is the key verification!)
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get crd | grep karmada
-
-# Should show 17 Karmada CRDs (propagationpolicies, clusters, works, etc.)
-
-# 4. Check Cluster API resource is available
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config api-resources | grep "clusters.*cluster.karmada.io"
-
-# Should show: clusters    cluster.karmada.io/v1alpha1    false    Cluster
-
-```
+✅ **All verifications passed?** Karmada is ready! You now have a multi-cluster control plane running locally.
 
 ---
 
@@ -319,9 +288,9 @@ Azure Cloud:
 | Resource | Name | Location | Size | Cost/hour |
 |----------|------|----------|------|-----------|
 | Resource Group | `karmada-demo-rg` | eastus2 | - | Free |
-| AKS Cluster 1 | `member-eastus2` | eastus2 | 2 nodes (D4s_v5) | ~$0.40 |
-| AKS Cluster 2 | `member-westus3` | westus3 | 2 nodes (D4s_v5) | ~$0.40 |
-| AKS Cluster 3 | `member-uksouth` | uksouth | 2 nodes (D4s_v5) | ~$0.40 |
+| AKS Cluster 1 | `member-eastus2` | eastus2 | 1 node (D2ps_v6) | low |
+| AKS Cluster 2 | `member-westus3` | westus3 | 1 node (D2ps_v6) | low |
+| AKS Cluster 3 | `member-uksouth` | uksouth | 1 node (D2ps_v6) | low |
 
 **Total cost**: ~$1.20/hour (~$8 for this entire demo if you delete resources after 6-7 hours)
 
@@ -329,32 +298,18 @@ Azure Cloud:
 
 ```bash
 # Navigate to karmada-demo folder
-cd /Users/song/codebase/dko_111/documentdb-playground/karmada-demo
+cd /home/song/dko_111/documentdb-playground/karmada-demo
 
-# Execute deployment script
-./deploy-clusters.sh
+RESOURCE_GROUP=karmada-demo-rg
+REGIONS=(eastus2 westus3 uksouth)
 
-# This script will:
-# 1. Create resource group in eastus2
-# 2. Deploy 3 AKS clusters in parallel (faster than sequential)
-# 3. Save logs to /tmp/cluster-{region}.log
-# 4. Show "✓ All clusters deployed successfully!" when done
-```
+# Create 3 member clusters (1 node, cost-optimized)
+for r in "${REGIONS[@]}"; do
+  ./create-cluster.sh --cluster-name member-$r --resource-group $RESOURCE_GROUP --location $r \
+    --node-count 1 --node-size Standard_D2ps_v6 --skip-operator --skip-instance --skip-storage-class
+done
 
-**Expected Output** (abbreviated):
-```
-Creating resource group: karmada-demo-rg in eastus2...
-Starting cluster deployments in parallel...
-Deploying member-eastus2 in eastus2...
-Deploying member-westus3 in westus3...
-Deploying member-uksouth in uksouth...
-
-... (wait 10-15 minutes) ...
-
-✓ member-eastus2 deployment complete
-✓ member-westus3 deployment complete
-✓ member-uksouth deployment complete
-✓ All clusters deployed successfully!
+echo "✓ All clusters deployed successfully!"
 ```
 
 ⏳ **While waiting**: Each cluster takes ~10-15 minutes to provision. You'll see "✓" marks as each completes.
@@ -397,40 +352,22 @@ az aks get-credentials --resource-group karmada-demo-rg --name member-eastus2 --
 az aks get-credentials --resource-group karmada-demo-rg --name member-westus3 --overwrite-existing
 az aks get-credentials --resource-group karmada-demo-rg --name member-uksouth --overwrite-existing
 
-# ═══════════════════════════════════════════════════════════
-# Verification 2: Check kubectl contexts are configured
-# ═══════════════════════════════════════════════════════════
-echo -e "\nVerifying kubectl contexts..."
-**What does "join" mean?** This command registers each AKS cluster with Karmada, giving Karmada permission to deploy resources to them. Think of it as "enrolling" clusters into Karmada's management.
-
-**Mode: Push** - Karmada will actively "push" resources to member clusters (alternative is "Pull" mode where clusters pull resources).
+# Verify contexts exist
+kubectl config get-contexts | grep member-
 
 ```bash
-# ═══════════════════════════════════════════════════════════
-# Join each AKS cluster to Karmada control plane
-# ═══════════════════════════════════════════════════════════
-echo "Joining member-eastus2 to Karmada..."
-sudo karmadactl --kubeconfig /etc/karmada/karmada-apiserver.config \
-  join member-eastus2 \
-  --cluster-kubeconfig=$HOME/.kube/config \
-  --cluster-context=member-eastus2
-
 echo "Joining member-westus3 to Karmada..."
-sudo karmadactl --kubeconfig /etc/karmada/karmada-apiserver.config \
-  join member-westus3 \
-  --cluster-kubeconfig=$HOME/.kube/config \
-  --cluster-context=member-westus3
-
 echo "Joining member-uksouth to Karmada..."
-sudo karmadactl --kubeconfig /etc/karmada/karmada-apiserver.config \
-  join member-uksouth \
-  --cluster-kubeconfig=$HOME/.kube/config \
-  --cluster-context=member-uksouth
+for c in member-eastus2 member-westus3 member-uksouth; do
+  echo "Joining $c to Karmada..."
+  sudo karmadactl --kubeconfig /etc/karmada/karmada-apiserver.config \
+    join $c \
+    --cluster-kubeconfig=$HOME/.kube/config \
+    --cluster-context=$c \
+    --cluster-labels region=$(echo $c | awk -F- '{print $2}')
+done
 
-# ═══════════════════════════════════════════════════════════
-# Verification: Check clusters are registered with Karmada
-# ═══════════════════════════════════════════════════════════
-echo -e "\nVerifying clusters are joined to Karmada..."
+# Verify: Ready=True
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get clusters
 
 ```
@@ -617,7 +554,7 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   
   # Install operator from local Helm chart
   helm --kube-context $cluster install documentdb-operator \
-    /Users/song/codebase/dko_111/operator/documentdb-helm-chart \
+    /home/song/dko_111/operator/documentdb-helm-chart \
     --namespace documentdb-operator \
     --create-namespace \
     --wait
@@ -740,10 +677,10 @@ kubectl --context member-eastus2 describe pod -n documentdb-operator \
 - Zero Azure fees
 
 **What we're deploying**:
-- Namespace (documentdb-system)
+- Namespace (documentdb-preview-ns)
 - Secret (database credentials)
-- DocumentDB resource (standalone instance on each cluster)
-- PropagationPolicy (tells Karmada which clusters get which resources)
+- DocumentDB resource `documentdb-preview` (replicated to all 3 clusters)
+- PropagationPolicies (tell Karmada which clusters get the namespace, secret, and DocumentDB)
 
 **Time**: 2-3 minutes
 
@@ -762,19 +699,19 @@ cat > /tmp/documentdb-karmada.yaml << 'EOF'
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: documentdb-system
+  name: documentdb-preview-ns
 ---
 # PropagationPolicy for namespace (apply to all clusters)
 apiVersion: policy.karmada.io/v1alpha1
 kind: PropagationPolicy
 metadata:
   name: documentdb-namespace-policy
-  namespace: documentdb-system
+  namespace: documentdb-preview-ns
 spec:
   resourceSelectors:
     - apiVersion: v1
       kind: Namespace
-      name: documentdb-system
+      name: documentdb-preview-ns
   placement:
     clusterAffinity:
       clusterNames:
@@ -787,7 +724,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: documentdb-credentials
-  namespace: documentdb-system
+  namespace: documentdb-preview-ns
 type: Opaque
 stringData:
   username: demouser
@@ -798,7 +735,7 @@ apiVersion: policy.karmada.io/v1alpha1
 kind: PropagationPolicy
 metadata:
   name: documentdb-credentials-policy
-  namespace: documentdb-system
+  namespace: documentdb-preview-ns
 spec:
   resourceSelectors:
     - apiVersion: v1
@@ -811,19 +748,35 @@ spec:
         - member-westus3
         - member-uksouth
 ---
-# DocumentDB resource (standalone instance)
+# DocumentDB resource (multi-cluster, Karmada networking)
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
-  name: demo-documentdb
-  namespace: documentdb-system
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
 spec:
   nodeCount: 1
   instancesPerNode: 1
   documentDbCredentialSecret: documentdb-credentials
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   resource:
     storage:
-      pvcSize: 1Gi
+      pvcSize: 10Gi
+  environment: aks
+  clusterReplication:
+    highAvailability: true
+    crossCloudNetworkingStrategy: Karmada
+    primary: member-eastus2
+    clusterList:
+      - name: member-eastus2
+        environment: aks
+      - name: member-westus3
+        environment: aks
+      - name: member-uksouth
+        environment: aks
+  exposeViaService:
+    serviceType: LoadBalancer
   logLevel: info
 ---
 # PropagationPolicy for DocumentDB (apply to all clusters)
@@ -831,12 +784,12 @@ apiVersion: policy.karmada.io/v1alpha1
 kind: PropagationPolicy
 metadata:
   name: documentdb-resource-policy
-  namespace: documentdb-system
+  namespace: documentdb-preview-ns
 spec:
   resourceSelectors:
     - apiVersion: documentdb.io/preview
       kind: DocumentDB
-      name: demo-documentdb
+      name: documentdb-preview
   placement:
     clusterAffinity:
       clusterNames:
@@ -862,11 +815,11 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f /tmp/do
 
 **Expected Output**:
 ```
-namespace/documentdb-system created
+namespace/documentdb-preview-ns created
 propagationpolicy.policy.karmada.io/documentdb-namespace-policy created
 secret/documentdb-credentials created
 propagationpolicy.policy.karmada.io/documentdb-credentials-policy created
-documentdb.documentdb.io/demo-documentdb created
+documentdb.documentdb.io/documentdb-preview created
 propagationpolicy.policy.karmada.io/documentdb-resource-policy created
 ```
 
@@ -895,15 +848,15 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f /tmp/do
 # Check ResourceBinding (Karmada's propagation tracker)
 # ═══════════════════════════════════════════════════════════
 echo "Checking Karmada ResourceBinding status..."
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get resourcebinding -n documentdb-system
+sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get resourcebinding -n documentdb-preview-ns
 ```
 
 **Expected Output**:
 ```
 NAME                                    SCHEDULED   FULLYAPPLIED   AGE
 documentdb-credentials-xxx              True        True           30s
-documentdb-system-namespace-xxx         True        True           30s
-demo-documentdb-documentdb-xxx          True        True           30s
+documentdb-preview-ns-namespace-xxx     True        True           30s
+documentdb-preview-documentdb-xxx       True        True           30s
 ```
 
 ✅ **Success Indicators**:
@@ -922,31 +875,30 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
   # Check namespace
-  kubectl --context $cluster get namespace documentdb-system 2>/dev/null && echo "✓ Namespace exists" || echo "✗ Namespace missing"
+  kubectl --context $cluster get namespace documentdb-preview-ns 2>/dev/null && echo "✓ Namespace exists" || echo "✗ Namespace missing"
   
   # Check secret
-  kubectl --context $cluster get secret documentdb-credentials -n documentdb-system 2>/dev/null && echo "✓ Secret exists" || echo "✗ Secret missing"
+  kubectl --context $cluster get secret documentdb-credentials -n documentdb-preview-ns 2>/dev/null && echo "✓ Secret exists" || echo "✗ Secret missing"
   
   # Check DocumentDB resource
-  kubectl --context $cluster get documentdb -n documentdb-system 2>/dev/null && echo "✓ DocumentDB resource exists" || echo "✗ DocumentDB missing"
-  
-  echo ""
-done
-```
+  kubectl --context $cluster get documentdb documentdb-preview -n documentdb-preview-ns 2>/dev/null && echo "✓ DocumentDB resource exists" || echo "✗ DocumentDB missing"
 
+  echo ""
+
+```
 **Expected Output** (for each cluster):
 ```
 === member-eastus2 ===
-NAME                 STATUS   AGE
-documentdb-system    Active   1m
+NAME                      STATUS   AGE
+documentdb-preview-ns     Active   1m
 ✓ Namespace exists
 
 NAME                      TYPE     DATA   AGE
 documentdb-credentials    Opaque   2      1m
 ✓ Secret exists
 
-NAME               AGE
-demo-documentdb    1m
+NAME                 AGE
+documentdb-preview    1m
 ✓ DocumentDB resource exists
 ```
 
@@ -981,13 +933,13 @@ for i in {1..8}; do
   
   for cluster in member-eastus2 member-westus3 member-uksouth; do
     echo "=== $cluster ==="
-    kubectl --context $cluster get pods -n documentdb-system 2>/dev/null | grep demo-documentdb || echo "No pods yet..."
+    kubectl --context $cluster get pods -n documentdb-preview-ns 2>/dev/null | grep documentdb-preview || echo "No pods yet..."
   done
   
   # Check if all pods are running
-  ready_count=$(kubectl --context member-eastus2 get pods -n documentdb-system 2>/dev/null | grep "2/2.*Running" | wc -l)
-  ready_count=$((ready_count + $(kubectl --context member-westus3 get pods -n documentdb-system 2>/dev/null | grep "2/2.*Running" | wc -l)))
-  ready_count=$((ready_count + $(kubectl --context member-uksouth get pods -n documentdb-system 2>/dev/null | grep "2/2.*Running" | wc -l)))
+  ready_count=$(kubectl --context member-eastus2 get pods -n documentdb-preview-ns 2>/dev/null | grep "2/2.*Running" | wc -l)
+  ready_count=$((ready_count + $(kubectl --context member-westus3 get pods -n documentdb-preview-ns 2>/dev/null | grep "2/2.*Running" | wc -l)))
+  ready_count=$((ready_count + $(kubectl --context member-uksouth get pods -n documentdb-preview-ns 2>/dev/null | grep "2/2.*Running" | wc -l)))
   
   if [ "$ready_count" -ge 3 ]; then
     echo -e "\n✅ All 3 DocumentDB pods are running!"
@@ -1010,20 +962,20 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 for cluster in member-eastus2 member-westus3 member-uksouth; do
   echo ""
   echo "=== $cluster ==="
-  kubectl --context $cluster get pods,svc -n documentdb-system
+  kubectl --context $cluster get pods,svc -n documentdb-preview-ns
 done
 ```
 
 **Expected Output** (for each cluster after 2-3 minutes):
 ```
 === member-eastus2 ===
-NAME                            READY   STATUS    AGE
-pod/demo-documentdb-1           2/2     Running   2m
+NAME                              READY   STATUS    AGE
+pod/documentdb-preview-1          2/2     Running   2m
 
-NAME                                TYPE        CLUSTER-IP     PORT(S)
-service/demo-documentdb-r           ClusterIP   10.0.123.45    5432/TCP
-service/demo-documentdb-ro          ClusterIP   10.0.123.46    5432/TCP
-service/demo-documentdb-rw          ClusterIP   10.0.123.47    5432/TCP,10260/TCP
+NAME                                    TYPE        CLUSTER-IP     PORT(S)
+service/documentdb-preview-r           ClusterIP   10.0.123.45    5432/TCP
+service/documentdb-preview-ro          ClusterIP   10.0.123.46    5432/TCP
+service/documentdb-preview-rw          ClusterIP   10.0.123.47    5432/TCP,10260/TCP
 ```
 
 ✅ **Success Indicators**:
@@ -1051,15 +1003,15 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "=== $cluster ==="
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  kubectl --context $cluster get documentdb -n documentdb-system -o wide
+  kubectl --context $cluster get documentdb -n documentdb-preview-ns -o wide
   echo ""
 done
 ```
 
 **Expected Output** (for each cluster):
 ```
-NAME               AGE
-demo-documentdb    5m
+NAME                 AGE
+documentdb-preview   5m
 ```
 
 ### Step 6.2: Connect to DocumentDB (Optional)
@@ -1068,7 +1020,7 @@ If you want to test database connectivity:
 
 ```bash
 # Port-forward to one of the clusters
-kubectl --context member-eastus2 port-forward -n documentdb-system svc/demo-documentdb-rw 10260:10260 &
+kubectl --context member-eastus2 port-forward -n documentdb-preview-ns svc/documentdb-preview-rw 10260:10260 &
 
 # Test MongoDB connection (if you have mongosh installed)
 mongosh "mongodb://demouser:DemoPassword123!@localhost:10260/?directConnection=true"
@@ -1242,10 +1194,10 @@ kubectl --context kind-karmada-host logs -n karmada-system -l app=karmada-contro
 kubectl --context member-eastus2 logs -n documentdb-operator -l app.kubernetes.io/name=documentdb-operator --tail=100
 
 # Check pod events
-kubectl --context member-eastus2 describe pod -n documentdb-system <pod-name>
+kubectl --context member-eastus2 describe pod -n documentdb-preview-ns <pod-name>
 
 # Check DocumentDB resource status
-kubectl --context member-eastus2 get documentdb -n documentdb-system -o yaml
+kubectl --context member-eastus2 get documentdb -n documentdb-preview-ns -o yaml
 ```
 
 ---

@@ -1,0 +1,69 @@
+# Namespace definition
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: default_user
+  password: {{DOCUMENTDB_PASSWORD}}
+
+---
+
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  resource:
+    storage:
+      pvcSize: 10Gi
+  environment: aks
+  clusterReplication:
+    highAvailability: true
+    crossCloudNetworkingStrategy: Karmada
+    primary: {{PRIMARY_CLUSTER}}
+    clusterList:
+{{CLUSTER_LIST}}
+  exposeViaService:
+    serviceType: LoadBalancer
+  logLevel: info
+
+---
+
+apiVersion: policy.karmada.io/v1alpha1
+kind: ClusterPropagationPolicy
+metadata:
+  name: documentdb-preview
+spec:
+  resourceSelectors:
+    - apiVersion: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+    - apiVersion: v1
+      kind: Secret
+      namespace: documentdb-preview-ns
+      name: documentdb-credentials
+    - apiVersion: documentdb.io/preview
+      kind: DocumentDB
+      namespace: documentdb-preview-ns
+      name: documentdb-preview
+  placement:
+    clusterAffinity:
+      labelSelector:
+        matchExpressions:
+          - key: kubernetes.io/metadata.name
+            operator: Exists
