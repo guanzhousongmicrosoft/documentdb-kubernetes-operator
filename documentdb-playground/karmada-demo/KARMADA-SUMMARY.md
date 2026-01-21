@@ -1,60 +1,95 @@
-# Karmada Evaluation Summary
+# Karmada vs Azure Fleet Manager - Evaluation Summary
+
 ## TL;DR
 
-Karmada can fully replace Azure Fleet Manager for multi-cluster orchestration. We successfully deployed DocumentDB across 3 AKS regions using Karmada.
+We evaluated Karmada as an alternative to Azure Fleet Manager. While Karmada works technically, **supporting both platforms doubles our development and operational effort**. Azure Fleet Manager is recommended for Azure-focused deployments.
 
 ---
 
 ## Key Findings
 
-### ✅ Pros
+### Development Effort - The Real Problem
 
-- **Multi-cloud support**: Works with AKS, EKS, GKE, on-prem - not locked to Azure
-- **Zero cost**: Open source, CNCF graduated project
-- **Same day-to-day workflow**: YAML-based deployment, identical to Fleet Manager
-- **Advanced scheduling**: Features Fleet Manager doesn't have (weighted placement, cluster taints, etc.)
+**Supporting Karmada means maintaining TWO deployment systems:**
 
-### ⚠️ Cons
+| Artifact | Azure Fleet Manager | Karmada | Impact |
+|----------|---------------------|---------|--------|
+| Deployment manifest | `ClusterResourcePlacement` | `PropagationPolicy` | **Different YAML schemas** |
+| Namespace propagation | Automatic | `ClusterPropagationPolicy` required | Extra manifest |
+| Override per-cluster | `ClusterResourceOverride` | `OverridePolicy` | Different API |
+| Documentation | Azure Docs | Karmada Docs | **Two doc sets to maintain** |
+| CI/CD pipelines | Fleet-specific | Karmada-specific | **Duplicate pipelines** |
+| Testing | Fleet test matrix | Karmada test matrix | **Double testing effort** |
 
-- **More initial setup**: ~20 min extra to deploy Karmada control plane (vs Fleet Manager's managed service)
-- **Self-managed**: We handle upgrades, HA, backups
-- **No Azure Portal visibility**: CLI/Grafana only
-- **Resource size limit**: ~1.5MB per resource (inherited from K8s etcd - same as Fleet Manager)
-- **Learning curve**: ~2-3 days for the team
+**Developer impact:**
+- Every feature change requires updating **two template systems**
+- Bug fixes must be validated on **both platforms**
+- Documentation must cover **both workflows**
+- Team must be trained on **both APIs**
+
+### Operational Complexity
+
+| Concern | Karmada | Fleet Manager |
+|---------|---------|---------------|
+| **Control plane management** | You deploy, upgrade, patch, monitor, backup | Fully managed by Microsoft |
+| **HA setup** | Manual configuration required | Built-in |
+| **Disaster recovery** | You design and implement | Azure handles it |
+| **Upgrades** | Manual, requires planning and testing | Automatic, zero downtime |
+| **Troubleshooting** | Community Slack/GitHub, no SLA | Microsoft Support with SLA |
+| **On-call burden** | Your team owns Karmada issues | Microsoft owns infrastructure |
+| **Security patching** | Your responsibility | Microsoft handles it |
+
+### Integration Gaps
+
+| Integration | Karmada | Fleet Manager |
+|-------------|---------|---------------|
+| Azure Portal | No visibility | Full dashboard |
+| Azure RBAC | Manual mapping | Native integration |
+| Azure Policy | Separate tooling | Built-in compliance |
+| Azure Monitor | DIY (Prometheus/Grafana) | Native metrics & logs |
+| Azure AD | Manual configuration | Seamless SSO |
+
+### Karmada Pros (Limited Use Cases)
+
+- Multi-cloud support (AKS + EKS + GKE in single control plane)
+- Works with on-premises Kubernetes
+- No Azure-specific dependencies
 
 ---
 
-## Setup Complexity - Honest Assessment
+## Recommendation
 
-| Task | Karmada | Fleet Manager |
-|------|---------|---------------|
-| Control plane setup | You deploy (5-10 min) | Azure provides (clicks) |
-| Join clusters | CLI commands | Portal or CLI |
-| Deploy resources | PropagationPolicy YAML | ClusterResourcePlacement YAML |
-| **Day-to-day ops** | Same | Same |
+### **Azure Fleet Manager is recommended** because:
 
-> **80% of our guide's steps (AKS, cert-manager, operator) are identical for both platforms.** The extra Karmada work is one-time setup.
+1. **Single template system** - One deployment workflow to maintain
+2. **Zero operational overhead** - Managed service, no infrastructure to run
+3. **Native Azure integration** - Portal, RBAC, Policy, Monitor work out-of-box
+4. **Enterprise support** - Microsoft SLA, not community Slack
+5. **Familiar patterns** - Team already knows Azure
 
----
+### When would Karmada make sense?
 
-## Decision Matrix
-
-| Choose Karmada if... | Stay with Fleet Manager if... |
-|----------------------|-------------------------------|
-| Multi-cloud is required | Azure-only environment |
-| Cost savings is priority | Prefer managed service |
-| Strong K8s team available | Limited ops capacity |
-| Avoid vendor lock-in | Need Azure Portal UI |
+Only if:
+- Multi-cloud is a **hard requirement** (must span AWS + Azure + GCP)
+- On-premises clusters must be managed alongside cloud
+- Dedicated platform team exists to manage Karmada infrastructure
 
 ---
 
 ## Key Trade-off
 
-> Karmada's ~20 min extra setup buys multi-cloud freedom and zero fees.  
-> Fleet Manager's convenience comes with Azure lock-in and service costs.
+| Factor | Karmada | Fleet Manager |
+|--------|---------|---------------|
+| **Dev effort** | Maintain separate templates | Single template system |
+| **Ops effort** | Self-managed control plane | Zero - managed service |
+| **Learning curve** | New concepts for team | Familiar Azure patterns |
+| **Support** | Community only | Microsoft enterprise |
+
+> **Bottom line**: Supporting Karmada alongside Fleet Manager doubles our maintenance burden for a capability (multi-cloud) we don't currently need.
 
 ---
 
 ## Related Documents
 
-- **Complete Setup Guide**: [COMPLETE-SETUP-GUIDE.md](COMPLETE-SETUP-GUIDE.md)
+- **Technical Comparison**: [KARMADA-VS-FLEET-MANAGER-REPORT.md](KARMADA-VS-FLEET-MANAGER-REPORT.md)
+- **Karmada Setup Guide** (for reference): [COMPLETE-SETUP-GUIDE.md](COMPLETE-SETUP-GUIDE.md)
