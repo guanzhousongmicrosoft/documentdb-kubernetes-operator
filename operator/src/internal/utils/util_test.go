@@ -752,19 +752,19 @@ func TestGetDocumentDBServiceDefinition_LoadBalancerAnnotations(t *testing.T) {
 			}
 
 			replicationContext := &ReplicationContext{
-				Self:        "test-db",
-				Environment: tt.environment,
-				state:       NoReplication,
+				CNPGClusterName: "test-db",
+				Environment:     tt.environment,
+				state:           NoReplication,
 			}
 
 			service := GetDocumentDBServiceDefinition(documentdb, replicationContext, "default", tt.serviceType)
 
 			if tt.expectAnnotations {
-				if service.Annotations == nil || len(service.Annotations) == 0 {
+				if len(service.Annotations) == 0 {
 					t.Error("Expected annotations to be set for LoadBalancer service")
 				}
 			} else {
-				if service.Annotations != nil && len(service.Annotations) > 0 {
+				if len(service.Annotations) > 0 {
 					t.Errorf("Expected no annotations for %v service, got %v", tt.serviceType, service.Annotations)
 				}
 			}
@@ -810,8 +810,8 @@ func TestGetDocumentDBServiceDefinition_ServiceNameLength(t *testing.T) {
 			}
 
 			replicationContext := &ReplicationContext{
-				Self:  tt.documentdbName,
-				state: NoReplication,
+				CNPGClusterName: tt.documentdbName,
+				state:           NoReplication,
 			}
 
 			service := GetDocumentDBServiceDefinition(documentdb, replicationContext, "default", corev1.ServiceTypeClusterIP)
