@@ -39,7 +39,7 @@ cd documentdb-kubernetes-operator
    Reopen in Container” command from the command palette.
 3. VS Code builds the container defined in
    `.devcontainer/devcontainer.json` using the
-   `mcr.microsoft.com/devcontainers/go:1-1.23-bullseye` base image. The build
+   `mcr.microsoft.com/devcontainers/go:2-1.25-bookworm` base image. The build
    installs the following features:
    - Docker-in-Docker runtime for building and running images
    - kind + kubectl/helm/kubectx/kubens/stern for Kubernetes workflows
@@ -65,9 +65,9 @@ Common tasks:
 | Spin up a kind cluster, push images, deploy operator & sample | `DEPLOY=true DEPLOY_CLUSTER=true ./scripts/development/deploy.sh` |
 | View operator logs | `stern documentdb-operator -n documentdb-operator` |
 
-> **Tip**: The devcontainer bind-mounts `/lib/modules` from the host to support
-> kind’s IPVS mode. Ensure Docker Desktop (or your Linux Docker service)
-> exposes this path if you modify the configuration.
+> **Tip**: The devcontainer uses Debian bookworm as its base image. Kind falls
+> back to iptables mode for kube-proxy, which is sufficient for local
+> development.
 
 ### Useful scripts
 
