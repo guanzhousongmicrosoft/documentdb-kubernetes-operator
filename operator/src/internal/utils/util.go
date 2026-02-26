@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -456,7 +457,10 @@ func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
 
 // GetDocumentDBImageForInstance returns the documentdb engine image.
 // Priority: spec.documentDBImage > spec.documentDBVersion > env.DOCUMENTDB_VERSION > default
-func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
+// The default depends on the deployment mode:
+//   - ImageVolume mode (useImageVolume=true): returns DEFAULT_DOCUMENTDB_IMAGE (extension image)
+//   - Combined mode (useImageVolume=false): returns DEFAULT_COMBINED_DOCUMENTDB_IMAGE (all-in-one image)
+func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB, useImageVolume bool) string {
 	if documentdb.Spec.DocumentDBImage != "" {
 		return documentdb.Spec.DocumentDBImage
 	}
@@ -478,8 +482,11 @@ func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
 		return CHANGESTREAM_DOCUMENTDB_IMAGE
 	}
 
-	// Fall back to default
-	return DEFAULT_DOCUMENTDB_IMAGE
+	// Fall back to mode-appropriate default
+	if useImageVolume {
+		return DEFAULT_DOCUMENTDB_IMAGE
+	}
+	return DEFAULT_COMBINED_DOCUMENTDB_IMAGE
 }
 
 func GenerateServiceName(source, target, resourceGroup string) string {
@@ -494,4 +501,80 @@ func GenerateServiceName(source, target, resourceGroup string) string {
 		targetLen := len(target) - truncateBy
 		return fmt.Sprintf("%s-%s", source[0:sourceLen], target[0:targetLen])
 	}
+}
+
+// ExtensionVersionToSemver converts a PostgreSQL extension version string from
+// the "Major.Minor-Patch" format (e.g., "0.110-0") returned by pg_available_extensions
+// to the standard dot-separated "Major.Minor.Patch" format (e.g., "0.110.0")
+// used in status.schemaVersion and image tags.
+//
+// Note: This function uses strings.LastIndex to find the last hyphen, so versions
+// with multiple hyphens like "0.110-beta-0" would produce "0.110-beta.0" which may
+// not be the intended result. Current DocumentDB versions use the simple "X.Y-Z"
+// format, so this is not an issue in practice.
+func ExtensionVersionToSemver(v string) string {
+	if idx := strings.LastIndex(v, "-"); idx >= 0 {
+		return v[:idx] + "." + v[idx+1:]
+	}
+	return v
+}
+
+// CompareExtensionVersions compares two DocumentDB extension version strings.
+// Format: "Major.Minor-Patch" (e.g., "0.110-0").
+// Returns: -1 if v1 < v2, 0 if equal, +1 if v1 > v2.
+func CompareExtensionVersions(v1, v2 string) (int, error) {
+	p1, err := parseExtensionVersion(v1)
+	if err != nil {
+		return 0, fmt.Errorf("invalid version %q: %w", v1, err)
+	}
+	p2, err := parseExtensionVersion(v2)
+	if err != nil {
+		return 0, fmt.Errorf("invalid version %q: %w", v2, err)
+	}
+
+	// Compare major → minor → patch
+	for i := 0; i < 3; i++ {
+		if p1[i] < p2[i] {
+			return -1, nil
+		}
+		if p1[i] > p2[i] {
+			return 1, nil
+		}
+	}
+	return 0, nil
+}
+
+// parseExtensionVersion parses a "Major.Minor-Patch" string into [major, minor, patch].
+func parseExtensionVersion(v string) ([3]int, error) {
+	var result [3]int
+
+	// Split on "-" to get [majorMinor, patch]
+	dashParts := strings.SplitN(v, "-", 2)
+	if len(dashParts) != 2 {
+		return result, fmt.Errorf("expected format Major.Minor-Patch, missing '-'")
+	}
+
+	// Split majorMinor on "." to get [major, minor]
+	dotParts := strings.SplitN(dashParts[0], ".", 2)
+	if len(dotParts) != 2 {
+		return result, fmt.Errorf("expected format Major.Minor-Patch, missing '.'")
+	}
+
+	major, err := strconv.Atoi(dotParts[0])
+	if err != nil {
+		return result, fmt.Errorf("invalid major version %q: %w", dotParts[0], err)
+	}
+	minor, err := strconv.Atoi(dotParts[1])
+	if err != nil {
+		return result, fmt.Errorf("invalid minor version %q: %w", dotParts[1], err)
+	}
+	patch, err := strconv.Atoi(dashParts[1])
+	if err != nil {
+		return result, fmt.Errorf("invalid patch version %q: %w", dashParts[1], err)
+	}
+
+	result[0] = major
+	result[1] = minor
+	result[2] = patch
+	return result, nil
 }
