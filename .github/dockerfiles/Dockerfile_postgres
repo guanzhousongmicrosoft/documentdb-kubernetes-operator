@@ -1,0 +1,64 @@
+# Lean PostgreSQL image with DocumentDB extensions
+# Designed for use with CloudNative-PG (CNPG) operator
+#
+# Usage:
+#   docker build \
+#     --build-arg POSTGRES_VERSION=18 \
+#     --build-arg DEB_PACKAGE_REL_PATH=packages/deb13-postgresql-18-documentdb_X.Y.Z_arm64.deb \
+#     -t documentdb-postgres:18 \
+#     -f Dockerfile_postgres .
+ARG BASE_IMAGE=debian:trixie-slim
+FROM ${BASE_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG POSTGRES_VERSION=18
+# Required: path (relative to build context) to a pre-built DocumentDB .deb.
+ARG DEB_PACKAGE_REL_PATH
+
+# Fail fast when the caller forgets the deb path.
+RUN [ -n "${DEB_PACKAGE_REL_PATH}" ] || \
+    (echo "ERROR: DEB_PACKAGE_REL_PATH build-arg is required." >&2; exit 1)
+
+# ---------- locale + pgdg repo + PostgreSQL + extension deps ----------
+RUN apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gnupg2 \
+        locales \
+        lsb-release \
+        wget; \
+    # locale
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen; \
+    locale-gen; \
+    # pgdg repository
+    install -d -m 0755 /etc/apt/keyrings; \
+    wget -qO /etc/apt/keyrings/pgdg.asc \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
+    echo "deb [signed-by=/etc/apt/keyrings/pgdg.asc] \
+        http://apt.postgresql.org/pub/repos/apt \
+        $(lsb_release -cs)-pgdg main ${POSTGRES_VERSION}" \
+        > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    # PostgreSQL and extension dependencies
+    apt-get install -y --no-install-recommends \
+        postgresql-${POSTGRES_VERSION} \
+        postgresql-${POSTGRES_VERSION}-cron \
+        postgresql-${POSTGRES_VERSION}-pgvector \
+        postgresql-${POSTGRES_VERSION}-postgis-3; \
+    # Remove build-only tools
+    apt-get purge -y --auto-remove lsb-release; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+# ---------- DocumentDB extension ----------
+COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
+RUN dpkg -i /tmp/documentdb.deb; \
+    rm -f /tmp/documentdb.deb
+
+ENV PATH=/usr/lib/postgresql/${POSTGRES_VERSION}/bin:$PATH
+
+USER postgres
+WORKDIR /home/postgres
