@@ -84,7 +84,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 							ImageVolumeSource: corev1.ImageVolumeSource{
 								Reference: documentdbImage,
 							},
-							LdLibraryPath: []string{"lib"},
+							DynamicLibraryPath:   []string{"usr/lib/postgresql/18/lib"},
+							ExtensionControlPath: []string{"usr/share/postgresql/18/extension"},
+							LdLibraryPath:        []string{"usr/lib/postgresql/18/lib"},
 						},
 					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
