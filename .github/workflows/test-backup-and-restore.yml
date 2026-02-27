@@ -43,7 +43,7 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
-  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
+  DOCUMENTDB_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
 
 jobs:
   # Conditional build workflow - only run if image_tag is not provided or on pull_request
@@ -271,7 +271,7 @@ jobs:
           nodeCount: ${{ matrix.node_count }}
           instancesPerNode: ${{ matrix.instances_per_node }}
           documentDBImage: ${{ env.DOCUMENTDB_IMAGE }}
-          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          gatewayImage: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
           resource:
             storage:
               pvcSize: 5Gi
@@ -453,7 +453,7 @@ jobs:
           nodeCount: ${{ matrix.node_count }}
           instancesPerNode: ${{ matrix.instances_per_node }}
           documentDBImage: ${{ env.DOCUMENTDB_IMAGE }}
-          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          gatewayImage: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
           resource:
             storage:
               pvcSize: 5Gi

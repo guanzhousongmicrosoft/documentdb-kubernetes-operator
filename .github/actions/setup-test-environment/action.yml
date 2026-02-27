@@ -57,11 +57,11 @@ inputs:
   documentdb-image:
     description: 'DocumentDB image to use for the cluster'
     required: false
-    default: 'ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0'
+    default: 'ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0'
   gateway-image:
-    description: 'Gateway image to use for the cluster (defaults to ghcr.io/microsoft/documentdb/documentdb-local:16)'
+    description: 'Gateway image to use for the cluster'
     required: false
-    default: 'ghcr.io/microsoft/documentdb/documentdb-local:16'
+    default: 'ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0'
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -225,12 +225,20 @@ runs:
         CLUSTER_NAME="documentdb-${{ inputs.test-type }}-${{ inputs.architecture }}-${{ inputs.test-scenario-name }}"
         OPERATOR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/operator:${{ inputs.image-tag }}-${{ inputs.architecture }}"
         SIDECAR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/sidecar:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        DOCUMENTDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        GATEWAY_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}-${{ inputs.architecture }}"
         
         # Load the operator image into kind cluster
         kind load docker-image "$OPERATOR_IMAGE" --name "$CLUSTER_NAME"
         
         # Load the sidecar image into kind cluster  
         kind load docker-image "$SIDECAR_IMAGE" --name "$CLUSTER_NAME"
+        
+        # Load the documentdb extension image into kind cluster
+        kind load docker-image "$DOCUMENTDB_IMAGE" --name "$CLUSTER_NAME"
+        
+        # Load the gateway image into kind cluster
+        kind load docker-image "$GATEWAY_IMAGE" --name "$CLUSTER_NAME"
         
         echo "✓ All local Docker images loaded into kind cluster successfully"
 

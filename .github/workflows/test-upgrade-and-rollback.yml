@@ -67,10 +67,10 @@ jobs:
     env:
       IMAGE_TAG: ${{ (github.event_name == 'pull_request' || inputs.image_tag == '' || inputs.image_tag == null) && needs.build.outputs.image_tag || inputs.image_tag }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
-      DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
-      DOCUMENTDB_OLD_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0
-      GATEWAY_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16
-      GATEWAY_OLD_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16 # TODO: update to actual old gateway image when available
+      DOCUMENTDB_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
+      DOCUMENTDB_OLD_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0
+      GATEWAY_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
+      GATEWAY_OLD_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0
 
     steps:
     - name: Checkout repository

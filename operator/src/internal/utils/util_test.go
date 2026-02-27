@@ -408,7 +408,34 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 			expected:       "custom-registry/documentdb:v2.0.0",
 		},
 
-		// Priority 2: ChangeStreams feature gate
+		// Priority 2: spec.DocumentDBVersion
+		{
+			name: "documentDBVersion in ImageVolume mode",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			}},
+			useImageVolume: true,
+			expected:       DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "documentDBVersion in combined mode",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			}},
+			useImageVolume: false,
+			expected:       COMBINED_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "custom image overrides documentDBVersion",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBImage:   "custom-registry/custom-image:v1",
+				DocumentDBVersion: "1.2.3",
+			}},
+			useImageVolume: true,
+			expected:       "custom-registry/custom-image:v1",
+		},
+
+		// Priority 3: ChangeStreams feature gate
 		{
 			name: "ChangeStreams enabled returns changestream image",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
@@ -510,6 +537,21 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			spec: dbpreview.DocumentDBSpec{
 				GatewayImage: "custom-registry/custom-gateway:v1",
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+			},
+			expected: "custom-registry/custom-gateway:v1",
+		},
+		{
+			name: "documentDBVersion resolves gateway image",
+			spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			},
+			expected: GATEWAY_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "explicit gatewayImage overrides documentDBVersion",
+			spec: dbpreview.DocumentDBSpec{
+				GatewayImage:      "custom-registry/custom-gateway:v1",
+				DocumentDBVersion: "1.2.3",
 			},
 			expected: "custom-registry/custom-gateway:v1",
 		},

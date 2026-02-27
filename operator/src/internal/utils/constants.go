@@ -11,14 +11,18 @@ const (
 	// DocumentDB versioning environment variable
 	DOCUMENTDB_VERSION_ENV = "DOCUMENTDB_VERSION"
 
-	// DocumentDB image repository
-	DOCUMENTDB_IMAGE_REPOSITORY = "ghcr.io/microsoft/documentdb/documentdb-local"
+	// Image repositories for deb-based images (must match build_images.yml naming)
+	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
+	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
+
+	// Legacy combined image repository (K8s < 1.35, all-in-one image)
+	COMBINED_IMAGE_REPO = "ghcr.io/microsoft/documentdb/documentdb-local"
 
 	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode (K8s >= 1.35).
-	DEFAULT_DOCUMENTDB_IMAGE = "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
+	DEFAULT_DOCUMENTDB_IMAGE = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
 	// DEFAULT_COMBINED_DOCUMENTDB_IMAGE is the all-in-one image used in combined mode (K8s < 1.35).
-	DEFAULT_COMBINED_DOCUMENTDB_IMAGE     = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
-	DEFAULT_GATEWAY_IMAGE                 = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
+	DEFAULT_COMBINED_DOCUMENTDB_IMAGE     = COMBINED_IMAGE_REPO + ":16"
+	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
 	// TODO: remove these constants once change stream support is included in the official images.
