@@ -185,7 +185,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		documentdb := &dbpreview.DocumentDB{
 			Spec: dbpreview.DocumentDBSpec{
 				InstancesPerNode: 3,
-				PostgresImage:    "ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm",
+				PostgresImage:    "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
 				Resource: dbpreview.Resource{
 					Storage: dbpreview.StorageConfiguration{
 						PvcSize: "10Gi",
@@ -203,7 +203,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.Bootstrap.InitDB).ToNot(BeNil())
 
 		// ImageVolume mode: PostgresImage as ImageName, extension via ImageVolumeSource
-		Expect(result.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm"))
+		Expect(result.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"))
 		Expect(result.Spec.PostgresConfiguration.Extensions).To(HaveLen(1))
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].Name).To(Equal("documentdb"))
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.Reference).To(Equal("documentdb-oss:1.0"))
