@@ -8,6 +8,11 @@ on:
         required: false
         default: '0.1.0'
         type: string
+      documentdb_ref:
+        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages'
+        required: false
+        default: 'main'
+        type: string
     outputs:
       image_tag:
         description: 'Built image tag'
@@ -132,7 +137,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       DOCUMENTDB_REPO: documentdb/documentdb
-      DOCUMENTDB_REPO_REF: main
+      DOCUMENTDB_REPO_REF: ${{ inputs.documentdb_ref || 'main' }}
     steps:
     - name: Checkout documentdb source
       uses: actions/checkout@v4
@@ -144,6 +149,8 @@ jobs:
       run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
 
     - name: Build gateway deb
+      # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
+      # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
       run: ./packaging/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
 
     - name: Upload packages
