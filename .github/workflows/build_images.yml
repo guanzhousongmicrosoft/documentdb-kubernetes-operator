@@ -157,11 +157,13 @@ jobs:
     - name: Prepare gateway build context
       if: matrix.image.name == 'gateway' && steps.should_build.outputs.skip != 'true'
       run: |
+        set -e
         mkdir -p gateway-context/packages gateway-context/scripts gateway-context/pg_documentdb_gw
         cp packages/*gateway*.deb gateway-context/packages/
         cp gateway-runtime/scripts/build_and_start_gateway.sh gateway-context/scripts/
         cp gateway-runtime/scripts/utils.sh gateway-context/scripts/
         cp gateway-runtime/pg_documentdb_gw/SetupConfiguration.json gateway-context/pg_documentdb_gw/
+        ls gateway-context/packages/*.deb || { echo "ERROR: Gateway deb not found"; exit 1; }
 
     - name: Login to GHCR
       if: steps.should_build.outputs.skip != 'true'
@@ -205,7 +207,7 @@ jobs:
       matrix:
         image: [operator, sidecar, documentdb, gateway]
     runs-on: ubuntu-22.04
-    needs: [build-and-push]
+    needs: [build-packages, build-and-push]
     env:
       VERSION: ${{ github.event.inputs.version || '0.1.1' }}
       MANIFEST_TAG: ${{ github.event.inputs.version || '0.1.1' }}-test
@@ -216,7 +218,7 @@ jobs:
       run: |
         SKIP="false"
         if [[ "${{ matrix.image }}" == "documentdb" || "${{ matrix.image }}" == "gateway" ]]; then
-          if [[ "${{ needs.build-and-push.result }}" != "success" ]]; then
+          if [[ "${{ needs.build-packages.result }}" != "success" ]]; then
             SKIP="true"
           fi
         fi
