@@ -56,7 +56,23 @@ ENV LANG=en_US.UTF-8 \
 # ---------- DocumentDB extension ----------
 COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
 RUN dpkg -i /tmp/documentdb.deb; \
-    rm -f /tmp/documentdb.deb
+    rm -f /tmp/documentdb.deb; \
+    # Resolve Debian-alternatives symlinks that break when the image is \
+    # mounted as a CNPG ImageVolume (the /etc/alternatives/ target is \
+    # outside the volume mount).  Replace each dangling symlink with a \
+    # copy of the file it ultimately points to. \
+    for link in \
+      /usr/share/postgresql/${POSTGRES_VERSION}/extension/*.control \
+      /usr/share/postgresql/${POSTGRES_VERSION}/extension/*.sql \
+      /usr/lib/postgresql/${POSTGRES_VERSION}/lib/*.so; do \
+        [ -L "$link" ] || continue; \
+        target=$(readlink -f "$link" 2>/dev/null); \
+        if [ -n "$target" ] && [ -f "$target" ]; then \
+            cp --remove-destination "$target" "$link"; \
+        elif [ -L "$link" ] && [ ! -e "$link" ]; then \
+            rm -f "$link"; \
+        fi; \
+    done
 
 ENV PATH=/usr/lib/postgresql/${POSTGRES_VERSION}/bin:$PATH
 
