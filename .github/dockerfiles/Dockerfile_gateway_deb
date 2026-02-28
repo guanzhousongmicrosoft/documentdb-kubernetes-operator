@@ -9,7 +9,7 @@
 #
 # The build context must contain:
 #   - The gateway .deb at GATEWAY_DEB_REL_PATH
-#   - scripts/build_and_start_gateway.sh
+#   - scripts/gateway_entrypoint.sh
 #   - scripts/utils.sh
 #   - pg_documentdb_gw/SetupConfiguration.json
 ARG BASE_IMAGE=debian:trixie-slim
@@ -23,34 +23,38 @@ ARG GATEWAY_DEB_REL_PATH
 RUN [ -n "${GATEWAY_DEB_REL_PATH}" ] || \
     (echo "ERROR: GATEWAY_DEB_REL_PATH build-arg is required." >&2; exit 1)
 
-# ---------- minimal runtime dependencies ----------
-RUN apt-get update; \
+# ---------- minimal runtime deps + PG client (psql, pg_isready) ----------
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         jq \
-        openssl; \
-    apt-get clean; \
+        openssl \
+        postgresql-client && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- gateway binary (from deb) ----------
 COPY ${GATEWAY_DEB_REL_PATH} /tmp/gateway.deb
-RUN dpkg -i /tmp/gateway.deb; \
+RUN dpkg -i /tmp/gateway.deb && \
     rm -f /tmp/gateway.deb
 
 # ---------- runtime config & scripts ----------
-RUN useradd -ms /bin/bash documentdb
+RUN useradd -ms /bin/bash -u 1000 documentdb
+
 RUN mkdir -p /home/documentdb/gateway/scripts \
-    && mkdir -p /home/documentdb/gateway/pg_documentdb_gw
+    && mkdir -p /home/documentdb/gateway/pg_documentdb_gw/target
 
 COPY pg_documentdb_gw/SetupConfiguration.json \
      /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json
-COPY scripts/build_and_start_gateway.sh \
-     /home/documentdb/gateway/scripts/build_and_start_gateway.sh
 COPY scripts/utils.sh \
      /home/documentdb/gateway/scripts/utils.sh
+COPY scripts/gateway_entrypoint.sh \
+     /home/documentdb/gateway/scripts/gateway_entrypoint.sh
 
 RUN chown -R documentdb:documentdb /home/documentdb/gateway \
     && chmod +x /home/documentdb/gateway/scripts/*.sh
 
 USER documentdb
-WORKDIR /home/documentdb/gateway/scripts
+WORKDIR /home/documentdb/gateway
+
+ENTRYPOINT ["/bin/bash", "/home/documentdb/gateway/scripts/gateway_entrypoint.sh"]

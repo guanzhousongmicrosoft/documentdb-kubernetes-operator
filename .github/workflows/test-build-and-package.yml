@@ -168,7 +168,6 @@ jobs:
       with:
         name: build-gateway-runtime-files
         path: |
-          scripts/build_and_start_gateway.sh
           scripts/utils.sh
           pg_documentdb_gw/SetupConfiguration.json
         retention-days: 1
@@ -266,9 +265,9 @@ jobs:
         set -e
         mkdir -p gateway-context/packages gateway-context/scripts gateway-context/pg_documentdb_gw
         cp packages/*gateway*.deb gateway-context/packages/
-        cp gateway-runtime/scripts/build_and_start_gateway.sh gateway-context/scripts/
         cp gateway-runtime/scripts/utils.sh gateway-context/scripts/
         cp gateway-runtime/pg_documentdb_gw/SetupConfiguration.json gateway-context/pg_documentdb_gw/
+        cp .github/dockerfiles/gateway_entrypoint.sh gateway-context/scripts/
         ls gateway-context/packages/*.deb || { echo "ERROR: Gateway deb not found"; exit 1; }
 
     - name: Set up Docker Buildx
