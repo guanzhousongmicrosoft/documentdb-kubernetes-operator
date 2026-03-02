@@ -6,6 +6,10 @@ replicaCount: 1
 # Defaults to Chart.appVersion if not specified  
 documentDbVersion: ""
 
+# Gateway image pull policy for the gateway sidecar container injected into DocumentDB pods.
+# Valid values: Always, IfNotPresent, Never. If not set, defaults to IfNotPresent.
+gatewayImagePullPolicy: ""
+
 serviceAccount:
   create: true
   automount: true

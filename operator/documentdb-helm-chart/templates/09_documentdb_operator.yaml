@@ -28,3 +28,7 @@ spec:
         - name: DOCUMENTDB_VERSION
           value: "{{ .Values.documentDbVersion | default .Chart.AppVersion }}"
         {{- end }}
+        {{- if .Values.gatewayImagePullPolicy }}
+        - name: GATEWAY_IMAGE_PULL_POLICY
+          value: "{{ .Values.gatewayImagePullPolicy }}"
+        {{- end }}

@@ -11,6 +11,9 @@ const (
 	// DocumentDB versioning environment variable
 	DOCUMENTDB_VERSION_ENV = "DOCUMENTDB_VERSION"
 
+	// Gateway image pull policy environment variable
+	GATEWAY_IMAGE_PULL_POLICY_ENV = "GATEWAY_IMAGE_PULL_POLICY"
+
 	// Image repositories for deb-based images (must match build_images.yml naming)
 	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
 	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"

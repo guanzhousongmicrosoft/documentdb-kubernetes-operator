@@ -5,6 +5,7 @@ package cnpg
 
 import (
 	"cmp"
+	"os"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
@@ -66,6 +67,10 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					params := map[string]string{
 						"gatewayImage":               gatewayImage,
 						"documentDbCredentialSecret": credentialSecretName,
+					}
+					// Pass gateway image pull policy if configured via env var.
+					if pullPolicy := os.Getenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV); pullPolicy != "" {
+						params["gatewayImagePullPolicy"] = pullPolicy
 					}
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
