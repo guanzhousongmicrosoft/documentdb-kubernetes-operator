@@ -91,7 +91,6 @@ jobs:
             node_count: 1
             instances_per_node: 1
             kubernetes_version: "v1.35.0"
-          # Combined mode (K8s < 1.35) - uses single all-in-one image
           - architecture: amd64
             runner: ubuntu-22.04
             test_scenario_name: "single-node"

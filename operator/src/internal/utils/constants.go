@@ -53,15 +53,6 @@ const (
 
 	CNPG_MAX_CLUSTER_NAME_LENGTH = 50
 
-	// Combined image mode constants (K8s < 1.35, no ImageVolume support)
-	// The documentdb-local combined image uses UID 105 / GID 108 for the postgres user.
-	COMBINED_IMAGE_POSTGRES_UID int64 = 105
-	COMBINED_IMAGE_POSTGRES_GID int64 = 108
-
-	// MinK8sMinorVersionForImageVolume is the minimum Kubernetes minor version where
-	// ImageVolume is GA (always enabled). K8s 1.35+ has ImageVolume GA.
-	MinK8sMinorVersionForImageVolume = 35
-
 	// JSON Patch paths
 	JSON_PATCH_PATH_REPLICA_CLUSTER      = "/spec/replica"
 	JSON_PATCH_PATH_POSTGRES_CONFIG      = "/spec/postgresql"
