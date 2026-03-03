@@ -476,6 +476,26 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("DOCUMENTDB_VERSION env var in ImageVolume mode", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		result := GetDocumentDBImageForInstance(db, true)
+		expected := DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.200.0"
+		if result != expected {
+			t.Errorf("got %q, want %q", result, expected)
+		}
+	})
+
+	t.Run("DOCUMENTDB_VERSION env var in combined mode", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		result := GetDocumentDBImageForInstance(db, false)
+		expected := COMBINED_IMAGE_REPO + ":0.200.0"
+		if result != expected {
+			t.Errorf("got %q, want %q", result, expected)
+		}
+	})
 }
 
 func TestGetPortFor(t *testing.T) {
@@ -580,6 +600,16 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("DOCUMENTDB_VERSION env var resolves gateway image", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		got := GetGatewayImageForDocumentDB(db)
+		expected := GATEWAY_IMAGE_REPO + ":0.200.0"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
 }
 
 func TestGetEnvironmentSpecificAnnotations(t *testing.T) {
