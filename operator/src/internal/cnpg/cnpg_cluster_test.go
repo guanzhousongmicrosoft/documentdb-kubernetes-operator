@@ -356,6 +356,51 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("my-tls-secret"))
 	})
 
+	It("includes gatewayImagePullPolicy in plugin parameters when env var is set", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		GinkgoT().Setenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV, "Never")
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:18", "test-sa", "", true, true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.Plugins).To(HaveLen(1))
+		Expect(result.Spec.Plugins[0].Parameters).To(HaveKeyWithValue("gatewayImagePullPolicy", "Never"))
+	})
+
+	It("omits gatewayImagePullPolicy from plugin parameters when env var is not set", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:18", "test-sa", "", true, true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.Plugins).To(HaveLen(1))
+		Expect(result.Spec.Plugins[0].Parameters).ToNot(HaveKey("gatewayImagePullPolicy"))
+	})
+
 	Context("wal_level parameter", func() {
 		It("does not include wal_level when featureGates is nil", func() {
 			req := ctrl.Request{}
