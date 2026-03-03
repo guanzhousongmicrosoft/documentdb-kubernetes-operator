@@ -1,11 +1,12 @@
-# Lean PostgreSQL image with DocumentDB extensions
-# Designed for use with CloudNative-PG (CNPG) operator
+# DocumentDB extension image for CNPG ImageVolume mode.
+# Contains only the DocumentDB extension artifacts and their runtime
+# dependencies — PostgreSQL itself is provided by the CNPG base image.
 #
 # Usage:
 #   docker build \
 #     --build-arg POSTGRES_VERSION=18 \
 #     --build-arg DEB_PACKAGE_REL_PATH=packages/deb13-postgresql-18-documentdb_X.Y.Z_arm64.deb \
-#     -t documentdb-postgres:18 \
+#     -t documentdb-extension:latest \
 #     -f Dockerfile_postgres .
 ARG BASE_IMAGE=debian:trixie-slim
 FROM ${BASE_IMAGE}
@@ -19,18 +20,13 @@ ARG DEB_PACKAGE_REL_PATH
 RUN [ -n "${DEB_PACKAGE_REL_PATH}" ] || \
     (echo "ERROR: DEB_PACKAGE_REL_PATH build-arg is required." >&2; exit 1)
 
-# ---------- locale + pgdg repo + PostgreSQL + extension deps ----------
+# ---------- pgdg repo (for pg_cron, pgvector, postgis packages) ----------
 RUN apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         gnupg2 \
-        locales \
         lsb-release \
         wget; \
-    # locale
-    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen; \
-    locale-gen; \
-    # pgdg repository
     install -d -m 0755 /etc/apt/keyrings; \
     wget -qO /etc/apt/keyrings/pgdg.asc \
         https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
@@ -39,24 +35,31 @@ RUN apt-get update; \
         $(lsb_release -cs)-pgdg main ${POSTGRES_VERSION}" \
         > /etc/apt/sources.list.d/pgdg.list; \
     apt-get update; \
-    # PostgreSQL and extension dependencies
-    apt-get install -y --no-install-recommends \
-        postgresql-${POSTGRES_VERSION} \
+    # Install extension packages without pulling in full PostgreSQL server.
+    # These debs depend on postgresql-NN, which is already in the CNPG base
+    # image at runtime, so we skip the dependency check here.
+    apt-get download \
         postgresql-${POSTGRES_VERSION}-cron \
         postgresql-${POSTGRES_VERSION}-pgvector \
         postgresql-${POSTGRES_VERSION}-postgis-3; \
+    dpkg --force-depends -i ./*.deb; \
+    rm -f ./*.deb; \
+    # Install runtime shared-library dependencies that the extensions need.
+    apt-get install -y --no-install-recommends -f; \
     # Remove build-only tools
-    apt-get purge -y --auto-remove lsb-release; \
+    apt-get purge -y --auto-remove ca-certificates gnupg2 lsb-release wget; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
-
 # ---------- DocumentDB extension ----------
 COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
-RUN dpkg -i /tmp/documentdb.deb; \
+RUN dpkg --force-depends -i /tmp/documentdb.deb; \
     rm -f /tmp/documentdb.deb; \
+    # Install any missing runtime dependencies for the DocumentDB extension.
+    apt-get update; \
+    apt-get install -y --no-install-recommends -f; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
     # Resolve Debian-alternatives symlinks that break when the image is \
     # mounted as a CNPG ImageVolume (the /etc/alternatives/ target is \
     # outside the volume mount).  Replace each dangling symlink with a \
@@ -73,8 +76,3 @@ RUN dpkg -i /tmp/documentdb.deb; \
             rm -f "$link"; \
         fi; \
     done
-
-ENV PATH=/usr/lib/postgresql/${POSTGRES_VERSION}/bin:$PATH
-
-USER postgres
-WORKDIR /home/postgres
