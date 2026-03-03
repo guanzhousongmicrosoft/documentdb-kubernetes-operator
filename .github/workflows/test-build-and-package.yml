@@ -208,11 +208,11 @@ jobs:
         echo "Using deb: $DEB_FILE"
         docker buildx build \
           --platform linux/${{ matrix.arch }} \
-          --build-arg POSTGRES_VERSION=18 \
+          --build-arg PG_MAJOR=18 \
           --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE \
           --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.arch }} \
           --load \
-          -f .github/dockerfiles/Dockerfile_postgres .
+          -f .github/dockerfiles/Dockerfile_extension .
         
         echo "✓ DocumentDB Docker image built successfully for ${{ matrix.arch }}"
 

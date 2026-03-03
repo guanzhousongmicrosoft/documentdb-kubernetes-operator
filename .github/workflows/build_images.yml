@@ -111,7 +111,7 @@ jobs:
             dockerfile: operator/cnpg-plugins/sidecar-injector/Dockerfile
             context: operator/cnpg-plugins/sidecar-injector/
           - name: documentdb
-            dockerfile: .github/dockerfiles/Dockerfile_postgres
+            dockerfile: .github/dockerfiles/Dockerfile_extension
             context: .
           - name: gateway
             dockerfile: .github/dockerfiles/Dockerfile_gateway_deb
@@ -185,7 +185,7 @@ jobs:
             ;;
           documentdb)
             DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
-            BUILD_ARGS="--build-arg POSTGRES_VERSION=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
+            BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
             ;;
           gateway)
             GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)

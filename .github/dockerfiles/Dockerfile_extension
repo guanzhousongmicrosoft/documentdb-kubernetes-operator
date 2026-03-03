@@ -1,0 +1,69 @@
+# DocumentDB extension image for CNPG ImageVolume mode.
+# Contains only extension artifacts (.so, .control, .sql, bitcode) and
+# runtime shared-library dependencies.  PostgreSQL is provided by the
+# CNPG base image at runtime.
+#
+# Follows the pattern from:
+#   https://github.com/cloudnative-pg/postgres-extensions-containers
+#
+# Usage:
+#   docker build \
+#     --build-arg PG_MAJOR=18 \
+#     --build-arg DEB_PACKAGE_REL_PATH=packages/documentdb_0.110-0_arm64.deb \
+#     -t documentdb-extension:latest \
+#     -f Dockerfile_extension .
+
+ARG BASE=ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+FROM ${BASE} AS builder
+
+ARG PG_MAJOR=18
+ARG DEB_PACKAGE_REL_PATH
+
+USER 0
+
+# Install pgdg extension packages (pg_cron, pgvector, postgis)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        postgresql-${PG_MAJOR}-cron \
+        postgresql-${PG_MAJOR}-pgvector \
+        postgresql-${PG_MAJOR}-postgis-3
+
+# Install the DocumentDB extension from a pre-built .deb
+COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
+RUN dpkg -i /tmp/documentdb.deb && \
+    rm -f /tmp/documentdb.deb
+
+# Resolve Debian-alternatives symlinks — they break in ImageVolume mode
+# because /etc/alternatives/ is outside the volume mount.
+RUN for link in \
+      /usr/share/postgresql/${PG_MAJOR}/extension/*.control \
+      /usr/share/postgresql/${PG_MAJOR}/extension/*.sql \
+      /usr/lib/postgresql/${PG_MAJOR}/lib/*.so; do \
+        [ -L "$link" ] || continue; \
+        target=$(readlink -f "$link" 2>/dev/null); \
+        if [ -n "$target" ] && [ -f "$target" ]; then \
+            cp --remove-destination "$target" "$link"; \
+        elif [ -L "$link" ] && [ ! -e "$link" ]; then \
+            rm -f "$link"; \
+        fi; \
+    done
+
+# ---------- minimal final image with only extension files ----------
+FROM scratch
+ARG PG_MAJOR=18
+
+# Libraries (.so files for all extensions)
+COPY --from=builder /usr/lib/postgresql/${PG_MAJOR}/lib/ /usr/lib/postgresql/${PG_MAJOR}/lib/
+
+# Extension SQL and control files
+COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/extension/ /usr/share/postgresql/${PG_MAJOR}/extension/
+
+# PostGIS supporting data (spatial_ref_sys, proj, gdal)
+COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/contrib/postgis-3.5/ /usr/share/postgresql/${PG_MAJOR}/contrib/postgis-3.5/
+
+# Runtime shared-library dependencies not in the CNPG base image.
+# These are mounted via LdLibraryPath in the CNPG extension config.
+COPY --from=builder /usr/lib/aarch64-linux-gnu/ /usr/lib/aarch64-linux-gnu/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
+
+USER 65532:65532
