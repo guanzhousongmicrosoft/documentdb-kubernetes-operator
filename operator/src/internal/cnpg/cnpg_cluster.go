@@ -91,7 +91,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 							},
 							DynamicLibraryPath:   []string{"lib"},
 							ExtensionControlPath: []string{"share"},
-							LdLibraryPath:        []string{"lib"},
+							LdLibraryPath:        []string{"lib", "system"},
 						},
 					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},

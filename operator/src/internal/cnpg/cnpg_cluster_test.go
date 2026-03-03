@@ -209,7 +209,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.Reference).To(Equal("documentdb-oss:1.0"))
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].DynamicLibraryPath).To(Equal([]string{"lib"}))
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].ExtensionControlPath).To(Equal([]string{"share"}))
-		Expect(result.Spec.PostgresConfiguration.Extensions[0].LdLibraryPath).To(Equal([]string{"lib"}))
+		Expect(result.Spec.PostgresConfiguration.Extensions[0].LdLibraryPath).To(Equal([]string{"lib", "system"}))
 		Expect(result.Spec.PostgresConfiguration.AdditionalLibraries).To(ConsistOf("pg_cron", "pg_documentdb_core", "pg_documentdb"))
 		Expect(result.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("cron.database_name", "postgres"))
 		Expect(result.Spec.PostgresConfiguration.PgHBA).To(HaveLen(3))
