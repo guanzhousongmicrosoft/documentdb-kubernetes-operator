@@ -373,7 +373,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		}
 
 		GinkgoT().Setenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV, "Never")
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:18", "test-sa", "", true, true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:18", "test-sa", "", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.Plugins).To(HaveLen(1))
 		Expect(result.Spec.Plugins[0].Parameters).To(HaveKeyWithValue("gatewayImagePullPolicy", "Never"))
@@ -395,7 +395,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:18", "test-sa", "", true, true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:18", "test-sa", "", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.Plugins).To(HaveLen(1))
 		Expect(result.Spec.Plugins[0].Parameters).ToNot(HaveKey("gatewayImagePullPolicy"))

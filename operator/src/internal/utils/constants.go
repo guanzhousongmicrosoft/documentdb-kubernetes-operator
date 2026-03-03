@@ -18,13 +18,12 @@ const (
 	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
 	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
 
-	// Legacy combined image repository (K8s < 1.35, all-in-one image)
-	COMBINED_IMAGE_REPO = "ghcr.io/microsoft/documentdb/documentdb-local"
+	// MinK8sMinorVersion is the minimum required Kubernetes minor version.
+	// The operator requires K8s 1.35+ for ImageVolume GA support.
+	MinK8sMinorVersion = 35
 
-	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode (K8s >= 1.35).
-	DEFAULT_DOCUMENTDB_IMAGE = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
-	// DEFAULT_COMBINED_DOCUMENTDB_IMAGE is the all-in-one image used in combined mode (K8s < 1.35).
-	DEFAULT_COMBINED_DOCUMENTDB_IMAGE     = COMBINED_IMAGE_REPO + ":16"
+	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
+	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
 	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 

@@ -400,20 +400,11 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 
 		// Priority 2: spec.DocumentDBVersion
 		{
-			name: "documentDBVersion in ImageVolume mode",
+			name: "documentDBVersion resolves extension image",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				DocumentDBVersion: "1.2.3",
 			}},
-			useImageVolume: true,
-			expected:       DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3",
-		},
-		{
-			name: "documentDBVersion in combined mode",
-			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-				DocumentDBVersion: "1.2.3",
-			}},
-			useImageVolume: false,
-			expected:       COMBINED_IMAGE_REPO + ":1.2.3",
+			expected: DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3",
 		},
 		{
 			name: "custom image overrides documentDBVersion",
@@ -421,8 +412,7 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 				DocumentDBImage:   "custom-registry/custom-image:v1",
 				DocumentDBVersion: "1.2.3",
 			}},
-			useImageVolume: true,
-			expected:       "custom-registry/custom-image:v1",
+			expected: "custom-registry/custom-image:v1",
 		},
 
 		// Priority 3: ChangeStreams feature gate
@@ -458,21 +448,11 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 		})
 	}
 
-	t.Run("DOCUMENTDB_VERSION env var in ImageVolume mode", func(t *testing.T) {
+	t.Run("DOCUMENTDB_VERSION env var resolves extension image", func(t *testing.T) {
 		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
 		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
-		result := GetDocumentDBImageForInstance(db, true)
+		result := GetDocumentDBImageForInstance(db)
 		expected := DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.200.0"
-		if result != expected {
-			t.Errorf("got %q, want %q", result, expected)
-		}
-	})
-
-	t.Run("DOCUMENTDB_VERSION env var in combined mode", func(t *testing.T) {
-		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
-		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
-		result := GetDocumentDBImageForInstance(db, false)
-		expected := COMBINED_IMAGE_REPO + ":0.200.0"
 		if result != expected {
 			t.Errorf("got %q, want %q", result, expected)
 		}

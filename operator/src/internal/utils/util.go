@@ -463,18 +463,12 @@ func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
 
 	// Use spec-level documentDBVersion if set
 	if documentdb.Spec.DocumentDBVersion != "" {
-		if useImageVolume {
-			return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
-		}
-		return fmt.Sprintf("%s:%s", COMBINED_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
 	}
 
 	// Use global documentDbVersion if set (from DOCUMENTDB_VERSION env var)
 	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-		if useImageVolume {
-			return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, version)
-		}
-		return fmt.Sprintf("%s:%s", COMBINED_IMAGE_REPO, version)
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, version)
 	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.

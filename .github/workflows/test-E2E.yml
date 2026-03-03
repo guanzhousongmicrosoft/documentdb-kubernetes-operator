@@ -91,20 +91,6 @@ jobs:
             node_count: 1
             instances_per_node: 1
             kubernetes_version: "v1.35.0"
-          - architecture: amd64
-            runner: ubuntu-22.04
-            test_scenario_name: "single-node"
-            node_count: 1
-            instances_per_node: 1
-            kubernetes_version: "v1.34.0"
-            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
-          - architecture: arm64
-            runner: ubuntu-22.04-arm
-            test_scenario_name: "single-node"
-            node_count: 1
-            instances_per_node: 1
-            kubernetes_version: "v1.34.0"
-            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
     
     env:
       # Use built image tag on PR or when no external tag provided
@@ -145,17 +131,8 @@ jobs:
 
     - name: Determine DocumentDB and Gateway image references
       run: |
-        # For ImageVolume mode with local builds, use the locally built images.
-        # For combined mode or external images, use the matrix-specified image.
-        if [[ -z "${{ matrix.documentdb_image }}" ]]; then
-          # ImageVolume mode: construct from locally built image tag
-          DOCDB_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
-          GW_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
-        else
-          # Combined mode: use the external all-in-one image
-          DOCDB_IMAGE="${{ matrix.documentdb_image }}"
-          GW_IMAGE="${{ matrix.documentdb_image }}"
-        fi
+        DOCDB_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
+        GW_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
         echo "DOCUMENTDB_IMAGE_REF=$DOCDB_IMAGE" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE_REF=$GW_IMAGE" >> $GITHUB_ENV
         echo "DocumentDB image: $DOCDB_IMAGE"
