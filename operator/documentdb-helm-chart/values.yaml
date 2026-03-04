@@ -6,15 +6,6 @@ replicaCount: 1
 # Defaults to Chart.appVersion if not specified  
 documentDbVersion: ""
 
-# Gateway image pull policy for the gateway sidecar container injected into DocumentDB pods.
-# Valid values: Always, IfNotPresent, Never. If not set, defaults to IfNotPresent.
-gatewayImagePullPolicy: ""
-
-# Optional default pull policy for DocumentDB extension image volume.
-# This is used only when spec.documentDBImagePullPolicy is not set on a DocumentDB resource.
-# Valid values: Always, IfNotPresent, Never. If not set, Kubernetes default behavior is used.
-documentDbImagePullPolicy: ""
-
 serviceAccount:
   create: true
   automount: true

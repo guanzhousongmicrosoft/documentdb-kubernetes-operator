@@ -5,7 +5,6 @@ package preview
 
 import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -39,12 +38,6 @@ type DocumentDBSpec struct {
 	// Changing this is not recommended for most users.
 	// If not specified, defaults based on documentDBVersion or operator defaults.
 	DocumentDBImage string `json:"documentDBImage,omitempty"`
-
-	// DocumentDBImagePullPolicy controls how the extension image is pulled for ImageVolume.
-	// If omitted, Kubernetes default image pull policy behavior is used.
-	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
-	// +optional
-	DocumentDBImagePullPolicy corev1.PullPolicy `json:"documentDBImagePullPolicy,omitempty"`
 
 	// GatewayImage is the container image to use for the DocumentDB Gateway sidecar.
 	// Changing this is not recommended for most users.

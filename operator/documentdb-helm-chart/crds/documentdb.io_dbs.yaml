@@ -1141,15 +1141,6 @@ spec:
                   Changing this is not recommended for most users.
                   If not specified, defaults based on documentDBVersion or operator defaults.
                 type: string
-              documentDBImagePullPolicy:
-                description: |-
-                  DocumentDBImagePullPolicy controls how the extension image is pulled for ImageVolume.
-                  If omitted, Kubernetes default image pull policy behavior is used.
-                enum:
-                - Always
-                - Never
-                - IfNotPresent
-                type: string
               documentDBVersion:
                 description: |-
                   DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).

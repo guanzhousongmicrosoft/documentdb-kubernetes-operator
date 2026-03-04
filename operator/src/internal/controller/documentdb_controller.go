@@ -1016,22 +1016,18 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 	// --- Extension image comparison ---
 	currentExtIndex := -1
 	var currentExtImage string
-	var currentExtPullPolicy corev1.PullPolicy
 	for i, ext := range currentCluster.Spec.PostgresConfiguration.Extensions {
 		if ext.Name == "documentdb" {
 			currentExtIndex = i
 			currentExtImage = ext.ImageVolumeSource.Reference
-			currentExtPullPolicy = ext.ImageVolumeSource.PullPolicy
 			break
 		}
 	}
 
 	var desiredExtImage string
-	var desiredExtPullPolicy corev1.PullPolicy
 	for _, ext := range desiredCluster.Spec.PostgresConfiguration.Extensions {
 		if ext.Name == "documentdb" {
 			desiredExtImage = ext.ImageVolumeSource.Reference
-			desiredExtPullPolicy = ext.ImageVolumeSource.PullPolicy
 			break
 		}
 	}
@@ -1048,43 +1044,13 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 		extensionUpdated = true
 	}
 
-	if currentExtPullPolicy != desiredExtPullPolicy {
-		if currentExtIndex == -1 {
-			return nil, false, false, fmt.Errorf("documentdb extension not found in current CNPG cluster spec")
-		}
-
-		policyPath := fmt.Sprintf(util.JSON_PATCH_PATH_EXTENSION_IMAGE_PULL_POLICY_FMT, currentExtIndex)
-		switch {
-		case desiredExtPullPolicy == "":
-			patchOps = append(patchOps, util.JSONPatch{
-				Op:   util.JSON_PATCH_OP_REMOVE,
-				Path: policyPath,
-			})
-		case currentExtPullPolicy == "":
-			patchOps = append(patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_ADD,
-				Path:  policyPath,
-				Value: string(desiredExtPullPolicy),
-			})
-		default:
-			patchOps = append(patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  policyPath,
-				Value: string(desiredExtPullPolicy),
-			})
-		}
-		extensionUpdated = true
-	}
-
 	// --- Gateway image comparison ---
 	// Find the target plugin name from the desired cluster
 	if len(desiredCluster.Spec.Plugins) > 0 {
 		desiredPluginName := desiredCluster.Spec.Plugins[0].Name
 		desiredGatewayImage := ""
-		desiredGatewayPullPolicy := ""
 		if desiredCluster.Spec.Plugins[0].Parameters != nil {
 			desiredGatewayImage = desiredCluster.Spec.Plugins[0].Parameters["gatewayImage"]
-			desiredGatewayPullPolicy = desiredCluster.Spec.Plugins[0].Parameters["gatewayImagePullPolicy"]
 		}
 
 		// Only check gateway if there's actually a desired gateway image
@@ -1092,10 +1058,8 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 			for i, plugin := range currentCluster.Spec.Plugins {
 				if plugin.Name == desiredPluginName {
 					currentGatewayImage := ""
-					currentGatewayPullPolicy := ""
 					if plugin.Parameters != nil {
 						currentGatewayImage = plugin.Parameters["gatewayImage"]
-						currentGatewayPullPolicy = plugin.Parameters["gatewayImagePullPolicy"]
 					}
 
 					if currentGatewayImage != desiredGatewayImage {
@@ -1104,30 +1068,6 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 							Path:  fmt.Sprintf(util.JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT, i),
 							Value: desiredGatewayImage,
 						})
-						gatewayUpdated = true
-					}
-
-					if currentGatewayPullPolicy != desiredGatewayPullPolicy {
-						policyPath := fmt.Sprintf(util.JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_PULL_POLICY_FMT, i)
-						switch {
-						case desiredGatewayPullPolicy == "":
-							patchOps = append(patchOps, util.JSONPatch{
-								Op:   util.JSON_PATCH_OP_REMOVE,
-								Path: policyPath,
-							})
-						case currentGatewayPullPolicy == "":
-							patchOps = append(patchOps, util.JSONPatch{
-								Op:    util.JSON_PATCH_OP_ADD,
-								Path:  policyPath,
-								Value: desiredGatewayPullPolicy,
-							})
-						default:
-							patchOps = append(patchOps, util.JSONPatch{
-								Op:    util.JSON_PATCH_OP_REPLACE,
-								Path:  policyPath,
-								Value: desiredGatewayPullPolicy,
-							})
-						}
 						gatewayUpdated = true
 					}
 					break

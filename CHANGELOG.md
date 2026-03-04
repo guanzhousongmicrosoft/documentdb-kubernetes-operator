@@ -9,7 +9,6 @@
 - **Removed combined mode support**: The legacy combined-image deployment mode for Kubernetes < 1.35 has been removed. Kubernetes 1.35+ is now required.
 - **Deb-based container images**: Container images switched from source-compiled builds to deb-based packages under `ghcr.io/documentdb/documentdb-kubernetes-operator/`. The extension and gateway are now separate images with versioned tags (e.g., `:0.110.0`).
 - **PostgreSQL base image changed to Debian trixie**: The default `postgresImage` changed from `postgresql:18-minimal-bookworm` to `postgresql:18-minimal-trixie` (Debian 13) to satisfy the deb-based extension's GLIBC requirements. Existing clusters that don't explicitly set `postgresImage` will use the new base on upgrade.
-- **Gateway image pull policy default changed from `Always` to `IfNotPresent`**: Since images now use immutable versioned tags, the gateway sidecar's pull policy defaults to `IfNotPresent`. Users who override `gatewayImage` with a mutable tag (e.g., `:latest`) should set `gatewayImagePullPolicy: Always` in their Helm values.
 
 ### Enhancements & Fixes
 - CI E2E test matrix updated to cover K8s 1.35+ on amd64 and arm64 architectures

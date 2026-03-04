@@ -11,12 +11,6 @@ const (
 	// DocumentDB versioning environment variable
 	DOCUMENTDB_VERSION_ENV = "DOCUMENTDB_VERSION"
 
-	// Gateway image pull policy environment variable
-	GATEWAY_IMAGE_PULL_POLICY_ENV = "GATEWAY_IMAGE_PULL_POLICY"
-
-	// DocumentDB extension image pull policy environment variable
-	DOCUMENTDB_IMAGE_PULL_POLICY_ENV = "DOCUMENTDB_IMAGE_PULL_POLICY"
-
 	// Image repositories for deb-based images (must match build_images.yml naming)
 	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
 	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
@@ -68,10 +62,8 @@ const (
 	JSON_PATCH_PATH_SYNCHRONOUS          = "/spec/postgresql/synchronous"
 
 	// JSON Patch path format strings for image upgrades (require fmt.Sprintf with index)
-	JSON_PATCH_PATH_EXTENSION_IMAGE_FMT             = "/spec/postgresql/extensions/%d/image/reference"
-	JSON_PATCH_PATH_EXTENSION_IMAGE_PULL_POLICY_FMT = "/spec/postgresql/extensions/%d/image/pullPolicy"
-	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT             = "/spec/plugins/%d/parameters/gatewayImage"
-	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_PULL_POLICY_FMT = "/spec/plugins/%d/parameters/gatewayImagePullPolicy"
+	JSON_PATCH_PATH_EXTENSION_IMAGE_FMT      = "/spec/postgresql/extensions/%d/image/reference"
+	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT = "/spec/plugins/%d/parameters/gatewayImage"
 
 	// JSON Patch operations
 	JSON_PATCH_OP_REPLACE = "replace"
