@@ -9,6 +9,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -399,6 +400,121 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.Plugins).To(HaveLen(1))
 		Expect(result.Spec.Plugins[0].Parameters).ToNot(HaveKey("gatewayImagePullPolicy"))
+	})
+
+	It("sets extension image pull policy when configured in DocumentDB spec", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode:          1,
+				DocumentDBImagePullPolicy: corev1.PullNever,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.PostgresConfiguration.Extensions).To(HaveLen(1))
+		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(Equal(corev1.PullNever))
+	})
+
+	It("uses extension image pull policy from env var when DocumentDB spec is unset", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		GinkgoT().Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, string(corev1.PullIfNotPresent))
+		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.PostgresConfiguration.Extensions).To(HaveLen(1))
+		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(Equal(corev1.PullIfNotPresent))
+	})
+
+	It("prefers DocumentDB spec extension image pull policy over env var default", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode:          1,
+				DocumentDBImagePullPolicy: corev1.PullAlways,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		GinkgoT().Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, string(corev1.PullNever))
+		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.PostgresConfiguration.Extensions).To(HaveLen(1))
+		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(Equal(corev1.PullAlways))
+	})
+
+	It("ignores invalid extension image pull policy env var value", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		GinkgoT().Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, "invalid-policy")
+		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.PostgresConfiguration.Extensions).To(HaveLen(1))
+		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(BeEmpty())
+	})
+
+	It("leaves extension image pull policy empty when not configured", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.PostgresConfiguration.Extensions).To(HaveLen(1))
+		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(BeEmpty())
 	})
 
 	Context("wal_level parameter", func() {

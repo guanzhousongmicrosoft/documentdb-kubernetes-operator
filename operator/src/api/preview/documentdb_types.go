@@ -5,6 +5,7 @@ package preview
 
 import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,6 +39,12 @@ type DocumentDBSpec struct {
 	// Changing this is not recommended for most users.
 	// If not specified, defaults based on documentDBVersion or operator defaults.
 	DocumentDBImage string `json:"documentDBImage,omitempty"`
+
+	// DocumentDBImagePullPolicy controls how the extension image is pulled for ImageVolume.
+	// If omitted, Kubernetes default image pull policy behavior is used.
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	// +optional
+	DocumentDBImagePullPolicy corev1.PullPolicy `json:"documentDBImagePullPolicy,omitempty"`
 
 	// GatewayImage is the container image to use for the DocumentDB Gateway sidecar.
 	// Changing this is not recommended for most users.
@@ -116,7 +123,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.persistentVolume) && self.persistentVolume.name != ”)",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional

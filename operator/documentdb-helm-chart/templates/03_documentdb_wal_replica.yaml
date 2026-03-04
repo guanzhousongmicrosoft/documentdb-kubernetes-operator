@@ -91,6 +91,7 @@ spec:
       serviceAccountName: wal-replica-manager
       containers:
       - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag }}"  
+        imagePullPolicy: "{{ .Values.image.walreplica.pullPolicy }}"
         name: cnpg-i-wal-replica
         ports:
         - containerPort: 9090

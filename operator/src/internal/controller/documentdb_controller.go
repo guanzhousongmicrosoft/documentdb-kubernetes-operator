@@ -1002,10 +1002,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 }
 
 // buildImagePatchOps compares the current and desired CNPG cluster specs and returns
-// JSON Patch operations for any image differences (extension image and/or gateway image).
+// JSON Patch operations for any image differences (extension image settings and/or gateway image).
 // This is a pure function with no API calls. Returns:
-//   - patchOps: 0–2 JSON Patch replace operations
-//   - extensionUpdated: true if extension image differs
+//   - patchOps: JSON Patch operations to align image-related fields
+//   - extensionUpdated: true if extension image settings differ
 //   - gatewayUpdated: true if gateway image differs
 //   - err: non-nil if the documentdb extension is not found in the current cluster
 func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.JSONPatch, bool, bool, error) {
@@ -1016,18 +1016,22 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 	// --- Extension image comparison ---
 	currentExtIndex := -1
 	var currentExtImage string
+	var currentExtPullPolicy corev1.PullPolicy
 	for i, ext := range currentCluster.Spec.PostgresConfiguration.Extensions {
 		if ext.Name == "documentdb" {
 			currentExtIndex = i
 			currentExtImage = ext.ImageVolumeSource.Reference
+			currentExtPullPolicy = ext.ImageVolumeSource.PullPolicy
 			break
 		}
 	}
 
 	var desiredExtImage string
+	var desiredExtPullPolicy corev1.PullPolicy
 	for _, ext := range desiredCluster.Spec.PostgresConfiguration.Extensions {
 		if ext.Name == "documentdb" {
 			desiredExtImage = ext.ImageVolumeSource.Reference
+			desiredExtPullPolicy = ext.ImageVolumeSource.PullPolicy
 			break
 		}
 	}
@@ -1041,6 +1045,34 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 			Path:  fmt.Sprintf(util.JSON_PATCH_PATH_EXTENSION_IMAGE_FMT, currentExtIndex),
 			Value: desiredExtImage,
 		})
+		extensionUpdated = true
+	}
+
+	if currentExtPullPolicy != desiredExtPullPolicy {
+		if currentExtIndex == -1 {
+			return nil, false, false, fmt.Errorf("documentdb extension not found in current CNPG cluster spec")
+		}
+
+		policyPath := fmt.Sprintf(util.JSON_PATCH_PATH_EXTENSION_IMAGE_PULL_POLICY_FMT, currentExtIndex)
+		switch {
+		case desiredExtPullPolicy == "":
+			patchOps = append(patchOps, util.JSONPatch{
+				Op:   util.JSON_PATCH_OP_REMOVE,
+				Path: policyPath,
+			})
+		case currentExtPullPolicy == "":
+			patchOps = append(patchOps, util.JSONPatch{
+				Op:    util.JSON_PATCH_OP_ADD,
+				Path:  policyPath,
+				Value: string(desiredExtPullPolicy),
+			})
+		default:
+			patchOps = append(patchOps, util.JSONPatch{
+				Op:    util.JSON_PATCH_OP_REPLACE,
+				Path:  policyPath,
+				Value: string(desiredExtPullPolicy),
+			})
+		}
 		extensionUpdated = true
 	}
 

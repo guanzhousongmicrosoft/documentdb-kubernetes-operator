@@ -5,6 +5,7 @@ package cnpg
 
 import (
 	"cmp"
+	"fmt"
 	"os"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -37,6 +38,11 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 	var storageClassPointer *string
 	if storageClass != "" {
 		storageClassPointer = &storageClass
+	}
+
+	extensionImageSource := corev1.ImageVolumeSource{Reference: documentdbImage}
+	if pullPolicy := resolveExtensionImagePullPolicy(documentdb, log); pullPolicy != "" {
+		extensionImageSource.PullPolicy = pullPolicy
 	}
 
 	return &cnpgv1.Cluster{
@@ -85,10 +91,8 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
 					Extensions: []cnpgv1.ExtensionConfiguration{
 						{
-							Name: "documentdb",
-							ImageVolumeSource: corev1.ImageVolumeSource{
-								Reference: documentdbImage,
-							},
+							Name:                 "documentdb",
+							ImageVolumeSource:    extensionImageSource,
 							DynamicLibraryPath:   []string{"lib"},
 							ExtensionControlPath: []string{"share"},
 							LdLibraryPath:        []string{"lib", "system"},
@@ -196,4 +200,30 @@ func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
 		return documentdb.Spec.Timeouts.StopDelay
 	}
 	return util.CNPG_DEFAULT_STOP_DELAY
+}
+
+// resolveExtensionImagePullPolicy returns the pull policy for extension ImageVolumeSource.
+// Precedence: DocumentDB spec override > operator env default > Kubernetes implicit default.
+func resolveExtensionImagePullPolicy(documentdb *dbpreview.DocumentDB, log logr.Logger) corev1.PullPolicy {
+	if documentdb.Spec.DocumentDBImagePullPolicy != "" {
+		return documentdb.Spec.DocumentDBImagePullPolicy
+	}
+
+	pullPolicy := os.Getenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV)
+	if pullPolicy == "" {
+		return ""
+	}
+
+	switch corev1.PullPolicy(pullPolicy) {
+	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+		return corev1.PullPolicy(pullPolicy)
+	default:
+		log.Error(
+			fmt.Errorf("invalid pull policy value: %s", pullPolicy),
+			"Ignoring invalid extension image pull policy from environment",
+			"envVar",
+			util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV,
+		)
+		return ""
+	}
 }

@@ -174,6 +174,178 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(gwUpdated).To(BeFalse())
 		})
 
+		It("should add extension pullPolicy when desired sets it and current is empty", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference:  "documentdb/documentdb:v1.0.0",
+									PullPolicy: corev1.PullNever,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(1))
+			Expect(patchOps[0].Op).To(Equal("add"))
+			Expect(patchOps[0].Path).To(Equal("/spec/postgresql/extensions/0/image/pullPolicy"))
+			Expect(patchOps[0].Value).To(Equal("Never"))
+			Expect(extUpdated).To(BeTrue())
+			Expect(gwUpdated).To(BeFalse())
+		})
+
+		It("should remove extension pullPolicy when desired clears it", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference:  "documentdb/documentdb:v1.0.0",
+									PullPolicy: corev1.PullIfNotPresent,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(1))
+			Expect(patchOps[0].Op).To(Equal("remove"))
+			Expect(patchOps[0].Path).To(Equal("/spec/postgresql/extensions/0/image/pullPolicy"))
+			Expect(extUpdated).To(BeTrue())
+			Expect(gwUpdated).To(BeFalse())
+		})
+
+		It("should replace extension pullPolicy when both current and desired are set", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference:  "documentdb/documentdb:v1.0.0",
+									PullPolicy: corev1.PullIfNotPresent,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference:  "documentdb/documentdb:v1.0.0",
+									PullPolicy: corev1.PullAlways,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(1))
+			Expect(patchOps[0].Op).To(Equal("replace"))
+			Expect(patchOps[0].Path).To(Equal("/spec/postgresql/extensions/0/image/pullPolicy"))
+			Expect(patchOps[0].Value).To(Equal("Always"))
+			Expect(extUpdated).To(BeTrue())
+			Expect(gwUpdated).To(BeFalse())
+		})
+
+		It("should return 2 ops when extension image and pullPolicy both differ", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference:  "documentdb/documentdb:v1.0.0",
+									PullPolicy: corev1.PullIfNotPresent,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference:  "documentdb/documentdb:v2.0.0",
+									PullPolicy: corev1.PullAlways,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(2))
+			Expect(patchOps[0].Op).To(Equal("replace"))
+			Expect(patchOps[0].Path).To(Equal("/spec/postgresql/extensions/0/image/reference"))
+			Expect(patchOps[0].Value).To(Equal("documentdb/documentdb:v2.0.0"))
+			Expect(patchOps[1].Op).To(Equal("replace"))
+			Expect(patchOps[1].Path).To(Equal("/spec/postgresql/extensions/0/image/pullPolicy"))
+			Expect(patchOps[1].Value).To(Equal("Always"))
+			Expect(extUpdated).To(BeTrue())
+			Expect(gwUpdated).To(BeFalse())
+		})
+
 		It("should return 1 op when only gateway image differs", func() {
 			currentCluster := &cnpgv1.Cluster{
 				Spec: cnpgv1.ClusterSpec{
