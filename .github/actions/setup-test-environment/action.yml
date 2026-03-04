@@ -55,13 +55,13 @@ inputs:
     required: false
     default: 'false'
   documentdb-image:
-    description: 'DocumentDB image to use for the cluster'
+    description: 'Optional DocumentDB image override for the cluster'
     required: false
-    default: 'ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0'
+    default: ''
   gateway-image:
-    description: 'Gateway image to use for the cluster'
+    description: 'Optional gateway image override for the cluster'
     required: false
-    default: 'ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0'
+    default: ''
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -559,6 +559,31 @@ runs:
         
         echo "✓ DocumentDB Operator installation completed on ${{ inputs.architecture }}"
 
+    - name: Resolve DocumentDB and Gateway image references
+      shell: bash
+      run: |
+        # Prefer explicit overrides when provided (e.g., upgrade baseline images).
+        if [[ -n "${{ inputs.documentdb-image }}" ]]; then
+          DOCDB_IMAGE="${{ inputs.documentdb-image }}"
+        elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}"
+        else
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        fi
+
+        if [[ -n "${{ inputs.gateway-image }}" ]]; then
+          GW_IMAGE="${{ inputs.gateway-image }}"
+        elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}"
+        else
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        fi
+
+        echo "DOCUMENTDB_IMAGE_RESOLVED=$DOCDB_IMAGE" >> $GITHUB_ENV
+        echo "GATEWAY_IMAGE_RESOLVED=$GW_IMAGE" >> $GITHUB_ENV
+        echo "Resolved DocumentDB image: $DOCDB_IMAGE"
+        echo "Resolved Gateway image: $GW_IMAGE"
+
     - name: Create DocumentDB credentials secret
       shell: bash
       run: |
@@ -600,8 +625,8 @@ runs:
         spec:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
-          documentDBImage: ${{ inputs.documentdb-image }}
-          gatewayImage: ${{ inputs.gateway-image }}
+          documentDBImage: ${DOCUMENTDB_IMAGE_RESOLVED}
+          gatewayImage: ${GATEWAY_IMAGE_RESOLVED}
           resource:
             storage:
               pvcSize: 5Gi
