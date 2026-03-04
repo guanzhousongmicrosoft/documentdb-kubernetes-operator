@@ -67,9 +67,6 @@ jobs:
     env:
       IMAGE_TAG: ${{ (github.event_name == 'pull_request' || inputs.image_tag == '' || inputs.image_tag == null) && needs.build.outputs.image_tag || inputs.image_tag }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
-      # Old images for initial deployment (upgrade baseline)
-      DOCUMENTDB_OLD_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0
-      GATEWAY_OLD_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0
 
     steps:
     - name: Checkout repository
@@ -84,7 +81,7 @@ jobs:
 
     - name: Determine new DocumentDB and Gateway image references
       run: |
-        # For local builds, use the locally built images as upgrade target.
+        # Keep upgrade/rollback workflow self-contained by using images from this run.
         if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
@@ -92,8 +89,14 @@ jobs:
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}"
         fi
+        OLD_DOCDB="$NEW_DOCDB"
+        OLD_GW="$NEW_GW"
         echo "DOCUMENTDB_IMAGE=$NEW_DOCDB" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE=$NEW_GW" >> $GITHUB_ENV
+        echo "DOCUMENTDB_OLD_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
+        echo "GATEWAY_OLD_IMAGE=$OLD_GW" >> $GITHUB_ENV
+        echo "Old DocumentDB image: $OLD_DOCDB"
+        echo "Old Gateway image: $OLD_GW"
         echo "New DocumentDB image: $NEW_DOCDB"
         echo "New Gateway image: $NEW_GW"
 
