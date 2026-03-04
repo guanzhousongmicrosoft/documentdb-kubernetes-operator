@@ -39,6 +39,10 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		storageClassPointer = &storageClass
 	}
 
+	// Set ImageVolumeSource.PullPolicy for the extension image when configured.
+	// This addresses the fact that ImageVolume sources DO support pull policies
+	// (via corev1.ImageVolumeSource.PullPolicy), unlike regular container images
+	// which only support pull policies on container specs.
 	extensionImageSource := corev1.ImageVolumeSource{Reference: documentdbImage}
 	if pullPolicy := parsePullPolicy(os.Getenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV)); pullPolicy != "" {
 		extensionImageSource.PullPolicy = pullPolicy

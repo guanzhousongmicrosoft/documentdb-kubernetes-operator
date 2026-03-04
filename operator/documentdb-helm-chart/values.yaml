@@ -12,6 +12,8 @@ gatewayImagePullPolicy: ""
 
 # DocumentDB extension image pull policy for the ImageVolume.
 # Valid values: Always, IfNotPresent, Never. If not set, Kubernetes default behavior is used.
+# This sets ImageVolumeSource.PullPolicy on the CNPG extension configuration
+# (see operator/src/internal/cnpg/cnpg_cluster.go).
 documentDbImagePullPolicy: ""
 
 serviceAccount:

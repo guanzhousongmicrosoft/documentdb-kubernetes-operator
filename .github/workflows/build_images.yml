@@ -173,6 +173,7 @@ jobs:
     - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
       if: steps.should_build.outputs.skip != 'true'
       run: |
+        set -euo pipefail
         TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
         IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
 
@@ -185,10 +186,22 @@ jobs:
             ;;
           documentdb)
             DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+            if [[ -z "$DEB_FILE" ]]; then
+              echo "ERROR: No DocumentDB extension .deb found in packages/" >&2
+              ls -la packages/ >&2
+              exit 1
+            fi
+            echo "Using deb: $DEB_FILE"
             BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
             ;;
           gateway)
             GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
+            if [[ -z "$GW_DEB" ]]; then
+              echo "ERROR: No gateway .deb found in gateway-context/packages/" >&2
+              ls -la gateway-context/packages/ >&2
+              exit 1
+            fi
+            echo "Using deb: $GW_DEB"
             BUILD_ARGS="--build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB"
             BUILD_CONTEXT="gateway-context"
             ;;
@@ -209,6 +222,7 @@ jobs:
         image: [operator, sidecar, documentdb, gateway]
     runs-on: ubuntu-22.04
     needs: [build-packages, build-and-push]
+    if: ${{ always() && !cancelled() }}
     env:
       VERSION: ${{ github.event.inputs.version || '0.1.1' }}
       MANIFEST_TAG: ${{ github.event.inputs.version || '0.1.1' }}-test
@@ -218,6 +232,11 @@ jobs:
       id: check
       run: |
         SKIP="false"
+        # Skip if build-and-push didn't succeed (required for all images)
+        if [[ "${{ needs.build-and-push.result }}" != "success" ]]; then
+          SKIP="true"
+        fi
+        # Additionally skip documentdb/gateway if their packages weren't built
         if [[ "${{ matrix.image }}" == "documentdb" || "${{ matrix.image }}" == "gateway" ]]; then
           if [[ "${{ needs.build-packages.result }}" != "success" ]]; then
             SKIP="true"

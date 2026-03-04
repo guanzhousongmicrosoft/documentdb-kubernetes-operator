@@ -203,8 +203,14 @@ jobs:
 
     - name: Build documentdb Docker image for ${{ matrix.arch }}
       run: |
+        set -euo pipefail
         echo "Building documentdb Docker image for ${{ matrix.arch }} architecture..."
         DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+        if [[ -z "$DEB_FILE" ]]; then
+          echo "ERROR: No DocumentDB extension .deb found in packages/" >&2
+          ls -la packages/ >&2
+          exit 1
+        fi
         echo "Using deb: $DEB_FILE"
         docker buildx build \
           --platform linux/${{ matrix.arch }} \
@@ -275,8 +281,14 @@ jobs:
 
     - name: Build gateway Docker image for ${{ matrix.arch }}
       run: |
+        set -euo pipefail
         echo "Building gateway Docker image for ${{ matrix.arch }} architecture..."
         GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
+        if [[ -z "$GW_DEB" ]]; then
+          echo "ERROR: No gateway .deb found in gateway-context/packages/" >&2
+          ls -la gateway-context/packages/ >&2
+          exit 1
+        fi
         echo "Using deb: $GW_DEB"
         docker buildx build \
           --platform linux/${{ matrix.arch }} \
