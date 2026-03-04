@@ -106,7 +106,7 @@ func (config *Configuration) applyDefaults() {
 	}
 	// Set defaults
 	if config.GatewayImage == "" {
-		config.GatewayImage = "ghcr.io/microsoft/documentdb/documentdb-local:16"
+		config.GatewayImage = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0"
 	}
 	if config.GatewayImagePullPolicy == "" {
 		config.GatewayImagePullPolicy = corev1.PullIfNotPresent
@@ -116,7 +116,8 @@ func (config *Configuration) applyDefaults() {
 	}
 }
 
-// parsePullPolicy converts a string to a corev1.PullPolicy, defaulting to IfNotPresent.
+// parsePullPolicy converts a string to a corev1.PullPolicy.
+// Returns empty string for unrecognized values; callers rely on applyDefaults() for the fallback.
 func parsePullPolicy(value string) corev1.PullPolicy {
 	switch corev1.PullPolicy(value) {
 	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
