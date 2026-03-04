@@ -465,6 +465,180 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(gwUpdated).To(BeTrue())
 		})
 
+		It("should add gateway pull policy when desired sets it and current is empty", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage": "gateway:v1.0.0",
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage":           "gateway:v1.0.0",
+								"gatewayImagePullPolicy": "Never",
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(1))
+			Expect(patchOps[0].Op).To(Equal("add"))
+			Expect(patchOps[0].Path).To(Equal("/spec/plugins/0/parameters/gatewayImagePullPolicy"))
+			Expect(patchOps[0].Value).To(Equal("Never"))
+			Expect(extUpdated).To(BeFalse())
+			Expect(gwUpdated).To(BeTrue())
+		})
+
+		It("should remove gateway pull policy when desired clears it", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage":           "gateway:v1.0.0",
+								"gatewayImagePullPolicy": "Always",
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage": "gateway:v1.0.0",
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(1))
+			Expect(patchOps[0].Op).To(Equal("remove"))
+			Expect(patchOps[0].Path).To(Equal("/spec/plugins/0/parameters/gatewayImagePullPolicy"))
+			Expect(extUpdated).To(BeFalse())
+			Expect(gwUpdated).To(BeTrue())
+		})
+
+		It("should replace gateway pull policy when both current and desired are set", func() {
+			currentCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage":           "gateway:v1.0.0",
+								"gatewayImagePullPolicy": "IfNotPresent",
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage":           "gateway:v1.0.0",
+								"gatewayImagePullPolicy": "Always",
+							},
+						},
+					},
+				},
+			}
+
+			patchOps, extUpdated, gwUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(patchOps).To(HaveLen(1))
+			Expect(patchOps[0].Op).To(Equal("replace"))
+			Expect(patchOps[0].Path).To(Equal("/spec/plugins/0/parameters/gatewayImagePullPolicy"))
+			Expect(patchOps[0].Value).To(Equal("Always"))
+			Expect(extUpdated).To(BeFalse())
+			Expect(gwUpdated).To(BeTrue())
+		})
+
 		It("should return error when documentdb extension is not found in current cluster", func() {
 			currentCluster := &cnpgv1.Cluster{
 				Spec: cnpgv1.ClusterSpec{

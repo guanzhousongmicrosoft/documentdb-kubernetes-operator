@@ -27,6 +27,7 @@ const (
 
 	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
 	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
+	// NOTE: Keep in sync with operator/cnpg-plugins/sidecar-injector/internal/config/config.go:applyDefaults()
 	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
@@ -69,7 +70,8 @@ const (
 	// JSON Patch path format strings for image upgrades (require fmt.Sprintf with index)
 	JSON_PATCH_PATH_EXTENSION_IMAGE_FMT             = "/spec/postgresql/extensions/%d/image/reference"
 	JSON_PATCH_PATH_EXTENSION_IMAGE_PULL_POLICY_FMT = "/spec/postgresql/extensions/%d/image/pullPolicy"
-	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT        = "/spec/plugins/%d/parameters/gatewayImage"
+	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT             = "/spec/plugins/%d/parameters/gatewayImage"
+	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_PULL_POLICY_FMT = "/spec/plugins/%d/parameters/gatewayImagePullPolicy"
 
 	// JSON Patch operations
 	JSON_PATCH_OP_REPLACE = "replace"

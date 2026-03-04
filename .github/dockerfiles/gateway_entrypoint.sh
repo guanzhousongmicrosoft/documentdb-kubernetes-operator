@@ -23,7 +23,7 @@ while [[ $# -gt 0 ]]; do
     --owner)       shift; OWNER="$1"; shift;;
     --username)    shift; USERNAME="$1"; shift;;
     --password)    shift; PASSWORD="$1"; shift;;
-    *) echo "Unknown option: $1"; shift;;
+    *) echo "Unknown option: $1" >&2; shift;;
   esac
 done
 
@@ -34,7 +34,11 @@ export PGHOST=localhost
 CONFIG="/home/documentdb/gateway/pg_documentdb_gw/target/SetupConfiguration_temp.json"
 cp /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json "$CONFIG"
 
-jq ".PostgresPort = $PG_PORT" "$CONFIG" > "$CONFIG.tmp" && mv "$CONFIG.tmp" "$CONFIG"
+if ! [[ "$PG_PORT" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: PG_PORT must be a number, got: $PG_PORT" >&2
+  exit 1
+fi
+jq --argjson port "$PG_PORT" '.PostgresPort = $port' "$CONFIG" > "$CONFIG.tmp" && mv "$CONFIG.tmp" "$CONFIG"
 
 if [ -n "$CERT_PATH" ] && [ -n "$KEY_FILE" ]; then
   jq --arg c "$CERT_PATH" --arg k "$KEY_FILE" \
