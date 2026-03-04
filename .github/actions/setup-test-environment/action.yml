@@ -428,6 +428,9 @@ runs:
               --set documentDbVersion="$LOCAL_IMAGE_TAG" \
               --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
               --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
+              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
+              --set image.sidecarinjector.pullPolicy=IfNotPresent \
+              --set image.walreplica.pullPolicy=IfNotPresent \
               --wait --timeout=15m
           else
             helm install documentdb-operator ./documentdb-chart \
@@ -436,6 +439,9 @@ runs:
               --set documentDbVersion="$LOCAL_IMAGE_TAG" \
               --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
               --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
+              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
+              --set image.sidecarinjector.pullPolicy=IfNotPresent \
+              --set image.walreplica.pullPolicy=IfNotPresent \
               --values /tmp/values-override.yaml \
               --wait --timeout=15m
           fi
@@ -460,6 +466,20 @@ runs:
         echo "Sidecar injector image (if present):"
         kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
         echo ""
+        echo "Operator imagePullPolicy:"
+        OPERATOR_PULL_POLICY=$(kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}')
+        echo "$OPERATOR_PULL_POLICY"
+        if [[ "$OPERATOR_PULL_POLICY" != "IfNotPresent" ]]; then
+          echo "❌ Expected operator imagePullPolicy=IfNotPresent for local images, got: $OPERATOR_PULL_POLICY"
+          exit 1
+        fi
+        echo "Sidecar injector imagePullPolicy:"
+        SIDECAR_PULL_POLICY=$(kubectl get deployment sidecar-injector -n cnpg-system -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}')
+        echo "$SIDECAR_PULL_POLICY"
+        if [[ "$SIDECAR_PULL_POLICY" != "IfNotPresent" ]]; then
+          echo "❌ Expected sidecar injector imagePullPolicy=IfNotPresent for local images, got: $SIDECAR_PULL_POLICY"
+          exit 1
+        fi
 
         # Additional verification - check that operator is actually running
         echo "Checking operator pod status..."
