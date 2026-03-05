@@ -1002,10 +1002,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 }
 
 // buildImagePatchOps compares the current and desired CNPG cluster specs and returns
-// JSON Patch operations for any image differences (extension image and/or gateway image).
+// JSON Patch operations for any image differences (extension image settings and/or gateway image).
 // This is a pure function with no API calls. Returns:
-//   - patchOps: 0–2 JSON Patch replace operations
-//   - extensionUpdated: true if extension image differs
+//   - patchOps: JSON Patch operations to align image-related fields
+//   - extensionUpdated: true if extension image settings differ
 //   - gatewayUpdated: true if gateway image differs
 //   - err: non-nil if the documentdb extension is not found in the current cluster
 func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.JSONPatch, bool, bool, error) {

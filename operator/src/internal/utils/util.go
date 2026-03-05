@@ -434,16 +434,15 @@ func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
 		return documentdb.Spec.GatewayImage
 	}
 
-	// TODO: Uncomment when we publish custom gateway images
-	// // Use spec-level documentDBVersion if set
-	// if documentdb.Spec.DocumentDBVersion != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, documentdb.Spec.DocumentDBVersion)
-	// }
+	// Use spec-level documentDBVersion if set
+	if documentdb.Spec.DocumentDBVersion != "" {
+		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+	}
 
-	// // Use global documentDbVersion if set
-	// if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, version)
-	// }
+	// Use global documentDbVersion if set
+	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
+		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, version)
+	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.
 	// TODO: remove this override once change stream support is included in the official images.
@@ -462,16 +461,15 @@ func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
 		return documentdb.Spec.DocumentDBImage
 	}
 
-	// TODO: Uncomment when we publish custom documentdb images
-	// // Use spec-level documentDBVersion if set
-	// if documentdb.Spec.DocumentDBVersion != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, documentdb.Spec.DocumentDBVersion)
-	// }
+	// Use spec-level documentDBVersion if set
+	if documentdb.Spec.DocumentDBVersion != "" {
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+	}
 
-	// // Use global documentDbVersion if set
-	// if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, version)
-	// }
+	// Use global documentDbVersion if set (from DOCUMENTDB_VERSION env var)
+	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, version)
+	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.
 	// TODO: remove this override once change stream support is included in the official images.

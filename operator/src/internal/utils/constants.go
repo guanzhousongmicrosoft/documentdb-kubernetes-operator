@@ -11,16 +11,24 @@ const (
 	// DocumentDB versioning environment variable
 	DOCUMENTDB_VERSION_ENV = "DOCUMENTDB_VERSION"
 
-	// DocumentDB image repository
-	DOCUMENTDB_IMAGE_REPOSITORY = "ghcr.io/microsoft/documentdb/documentdb-local"
+	// Gateway image pull policy environment variable
+	GATEWAY_IMAGE_PULL_POLICY_ENV = "GATEWAY_IMAGE_PULL_POLICY"
+
+	// DocumentDB extension image pull policy environment variable
+	DOCUMENTDB_IMAGE_PULL_POLICY_ENV = "DOCUMENTDB_IMAGE_PULL_POLICY"
+
+	// Image repositories for deb-based images (must match build_images.yml naming)
+	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
+	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
 
 	// MinK8sMinorVersion is the minimum required Kubernetes minor version.
 	// The operator requires K8s 1.35+ for ImageVolume GA support.
 	MinK8sMinorVersion = 35
 
-	// DEFAULT_DOCUMENTDB_IMAGE is the extension image mounted via CNPG ImageVolume.
-	DEFAULT_DOCUMENTDB_IMAGE              = "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
-	DEFAULT_GATEWAY_IMAGE                 = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
+	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
+	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
+	// NOTE: Keep in sync with operator/cnpg-plugins/sidecar-injector/internal/config/config.go:applyDefaults()
+	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
 	// TODO: remove these constants once change stream support is included in the official images.
