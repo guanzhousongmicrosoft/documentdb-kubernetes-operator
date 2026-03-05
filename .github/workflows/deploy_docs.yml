@@ -1,4 +1,4 @@
-name: Deploy MkDocs and Helm Repo
+name: Deploy Documentation
 on:
   workflow_dispatch:
   push:
@@ -7,7 +7,6 @@ on:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
-      - 'operator/documentdb-helm-chart/**'
 
 permissions:
   contents: read
@@ -34,24 +33,23 @@ jobs:
         run: pip install mkdocs mkdocs-material
       - name: Build documentation
         run: mkdocs build --clean
-      
-      - name: Install Helm
+
+      # Preserve any Helm chart artifacts already published on GitHub Pages
+      # so that a docs-only redeploy does not wipe the Helm repository.
+      - name: Restore existing Helm artifacts from GitHub Pages
+        env:
+          HELM_REPO_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: |
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-      
-      - name: Update chart dependencies
-        run: |
-          cd operator/documentdb-helm-chart
-          helm dependency update
-      
-      - name: Package Helm chart
-        run: |
-          helm package operator/documentdb-helm-chart -d site
-      
-      - name: Generate Helm index
-        run: |
-          helm repo index site --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-      
+          set -euo pipefail
+          if curl -fsSL "${HELM_REPO_URL}/index.yaml" -o site/index.yaml; then
+            echo "Restoring chart packages listed in existing index.yaml"
+            grep -Eo '[a-zA-Z0-9._-]+\.tgz' site/index.yaml | sort -u | while read -r tgz; do
+              curl -fsSL "${HELM_REPO_URL}/${tgz}" -o "site/${tgz}" || echo "Warning: failed to download ${tgz}"
+            done
+          else
+            echo "No existing Helm index found – first deployment."
+          fi
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
