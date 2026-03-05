@@ -109,7 +109,7 @@ karmadactl version
 
 **Why port 32443?** This is the default port Karmada uses for its API server. We expose it so other clusters can communicate with Karmada.
 
-```
+```bash
 # Create configuration file for Kind cluster
 cat > /tmp/kind-karmada.yaml << 'EOF'
 kind: Cluster
@@ -146,7 +146,7 @@ karmada-host-control-plane   127.0.0.1:62XXX->6443/tcp, 0.0.0.0:32443->32443/tcp
 
 **Time**: 5-10 minutes (downloads container images and starts 7 pods)
 
-```
+```bash
 
 sudo karmadactl init \
   --kubeconfig=$HOME/.kube/config \
@@ -186,7 +186,7 @@ Karmada is installed successfully.
 
 **Important**: You'll use `sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config` to talk to Karmada, not regular kubectl. If you need a repo-root variable for paths below, set it once:
 
-```
+```bash
 export REPO_ROOT="$(git rev-parse --show-toplevel)"
 ```
 
@@ -210,7 +210,7 @@ kubectl --context kind-karmada-host get pods -n karmada-system
 
 **If pods are not Running**: Wait 2-3 minutes for images to download.
 
-```
+```bash
 # ═══════════════════════════════════════════════════════════
 # Step 1: Install CNPG (PostgreSQL) CRDs
 # ═══════════════════════════════════════════════════════════
@@ -219,9 +219,12 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply --server-s
   -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
 
 # ═══════════════════════════════════════════════════════════
-# Step 2: Remove CNPG operator (we only need CRDs, not the operator)
+# Step 2: Remove CNPG operator AND namespace (we only need CRDs)
 # ═══════════════════════════════════════════════════════════
-echo "Removing CNPG operator (keeping only CRDs)..."
+# IMPORTANT: We must delete the cnpg-system namespace from Karmada to prevent
+# it from being propagated to member clusters, which would cause Helm ownership
+# conflicts when installing the DocumentDB operator.
+echo "Removing CNPG operator and namespace (keeping only CRDs)..."
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config delete deployment \
   -n cnpg-system cnpg-controller-manager 2>/dev/null || true
 
@@ -230,6 +233,9 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config delete \
 
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config delete \
   mutatingwebhookconfiguration cnpg-mutating-webhook-configuration 2>/dev/null || true
+
+# Delete the cnpg-system namespace to prevent propagation to member clusters
+sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config delete namespace cnpg-system 2>/dev/null || true
 
 # ═══════════════════════════════════════════════════════════
 # Step 3: Install DocumentDB CRDs
@@ -242,6 +248,7 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f operato
 # ═══════════════════════════════════════════════════════════
 echo -e "\nVerifying installed CRDs..."
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get crd | grep -E "documentdb|cnpg"
+
 ```
 
 **Expected Output**:
@@ -256,6 +263,7 @@ scheduledbackups.documentdb.io
 
 ```
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config api-resources | grep "clusters.*cluster.karmada.io"
+
 ```
 
 **Expected Output**:
@@ -305,7 +313,7 @@ Azure Cloud:
 cd "$REPO_ROOT/documentdb-playground/karmada-demo"
 
 # Create RG and three AKS clusters (eastus2, westus3, uksouth)
-./deploy-clusters.sh
+$REPO_ROOT/documentdb-playground/karmada-demo/deploy-clusters.sh
 ```
 
 ⏳ **While waiting**: Each cluster takes ~10-15 minutes to provision.
@@ -324,6 +332,7 @@ echo "Checking AKS clusters in Azure..."
 az aks list -g karmada-demo-rg \
   --query "[].{Name:name, Location:location, Status:provisioningState, K8sVersion:kubernetesVersion}" \
   -o table
+
 ```
 
 **Expected Output**:
@@ -350,6 +359,7 @@ az aks get-credentials --resource-group karmada-demo-rg --name member-uksouth --
 
 # Verify contexts exist
 kubectl config get-contexts | grep member-
+
 ```
 
 ✅ **Success**: All 3 contexts are present.
@@ -368,6 +378,7 @@ done
 
 # Verify: Ready=True
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get clusters
+
 ```
 
 **Expected Output**:
@@ -405,6 +416,7 @@ for c in member-eastus2 member-westus3 member-uksouth; do
   echo "=== $c ==="
   kubectl --context $c get nodes
 done
+
 ```
 
 **Expected Output** (for each cluster):
@@ -491,6 +503,7 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   kubectl --context $cluster get pods -n cert-manager
   echo ""
 done
+
 ```
 
 **Expected Output** (for each cluster):
@@ -538,13 +551,12 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
       meta.helm.sh/release-namespace=documentdb-operator --overwrite
   fi
 
-  # If CNPG namespace already exists (from CRD install), add Helm ownership labels/annotations too
+  # If CNPG namespace already exists (from Karmada propagation or previous install), 
+  # delete it first to avoid ownership conflicts, then let Helm create it fresh
   if kubectl --context $cluster get namespace cnpg-system >/dev/null 2>&1; then
-    kubectl --context $cluster label namespace cnpg-system \
-      app.kubernetes.io/managed-by=Helm app.kubernetes.io/name=documentdb-operator --overwrite
-    kubectl --context $cluster annotate namespace cnpg-system \
-      meta.helm.sh/release-name=documentdb-operator \
-      meta.helm.sh/release-namespace=documentdb-operator --overwrite
+    echo "⚠️  Removing existing cnpg-system namespace on $cluster to avoid Helm conflicts..."
+    kubectl --context $cluster delete namespace cnpg-system --wait=false 2>/dev/null || true
+    sleep 5
   fi
   
   # Install operator from local Helm chart
@@ -587,51 +599,8 @@ STATUS: deployed
 # ═══════════════════════════════════════════════════════════
 # Comprehensive verification of DocumentDB operator
 # ═══════════════════════════════════════════════════════════
-cat <<'EOF' | bash
-echo "Verifying DocumentDB operator deployment..."
-
-for cluster in member-eastus2 member-westus3 member-uksouth; do
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "=== $cluster ==="
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-  # Check namespace
-  if kubectl --context "$cluster" get namespace documentdb-operator >/dev/null 2>&1; then
-    echo "✓ Namespace: documentdb-operator exists"
-  else
-    echo "✗ Namespace: documentdb-operator MISSING"
-    continue
-  fi
-
-  # Check DocumentDB CRDs
-  crd_count=$(kubectl --context "$cluster" get crd 2>/dev/null | grep -c "documentdb.io" || echo "0")
-  echo "✓ DocumentDB CRDs installed: $crd_count"
-
-  # Check CNPG CRD (operator needs this)
-  if kubectl --context "$cluster" get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
-    echo "✓ CNPG CRD installed"
-  else
-    echo "⚠️  CNPG CRD missing - installing..."
-    kubectl --context "$cluster" apply --server-side --force-conflicts -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml
-    kubectl --context "$cluster" wait --for=condition=Established crd/clusters.postgresql.cnpg.io --timeout=90s
-  fi
-
-  echo ""
-  echo "Deployment status:"
-  kubectl --context "$cluster" get deployment -n documentdb-operator
-
-  echo ""
-  echo "Pod status:"
-  kubectl --context "$cluster" get pods -n documentdb-operator
-
-  echo ""
-  kubectl --context "$cluster" rollout status deployment/documentdb-operator -n documentdb-operator --timeout=180s && echo "✅ Operator is Ready!" || echo "⏳ Operator not ready yet..."
-
-  echo ""
-done
-
-echo "✅ All operators verified!"
-EOF
+# Run the verification script from the karmada-demo folder
+$REPO_ROOT/documentdb-playground/karmada-demo/verify-operator.sh
 ```
 
 **Expected Output** (for each cluster):
@@ -700,120 +669,24 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   kubectl --context $cluster create configmap cluster-name -n kube-system --from-literal=name=$cluster \
     --dry-run=client -o yaml | kubectl --context $cluster apply -f -
 done
+
 ```
+
+The manifest file is already provided in the karmada-demo folder:
 
 ```bash
-# ═══════════════════════════════════════════════════════════
-# Create complete DocumentDB deployment manifest
-# ═══════════════════════════════════════════════════════════
-cat > /tmp/documentdb-karmada.yaml << 'EOF'
-# Namespace for DocumentDB
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: documentdb-preview-ns
----
-# ClusterPropagationPolicy for namespace (Namespace is cluster-scoped)
-apiVersion: policy.karmada.io/v1alpha1
-kind: ClusterPropagationPolicy
-metadata:
-  name: documentdb-namespace-policy
-spec:
-  resourceSelectors:
-    - apiVersion: v1
-      kind: Namespace
-      name: documentdb-preview-ns
-  placement:
-    clusterAffinity:
-      clusterNames:
-        - member-eastus2
-        - member-westus3
-        - member-uksouth
----
-# Secret with database credentials
-apiVersion: v1
-kind: Secret
-metadata:
-  name: documentdb-credentials
-  namespace: documentdb-preview-ns
-type: Opaque
-stringData:
-  username: demouser
-  password: DemoPassword123!
----
-# PropagationPolicy for secret (apply to all clusters)
-apiVersion: policy.karmada.io/v1alpha1
-kind: PropagationPolicy
-metadata:
-  name: documentdb-credentials-policy
-  namespace: documentdb-preview-ns
-spec:
-  resourceSelectors:
-    - apiVersion: v1
-      kind: Secret
-      name: documentdb-credentials
-  placement:
-    clusterAffinity:
-      clusterNames:
-        - member-eastus2
-        - member-westus3
-        - member-uksouth
----
-# DocumentDB resource (multi-cluster)
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: documentdb-preview
-  namespace: documentdb-preview-ns
-spec:
-  nodeCount: 1
-  instancesPerNode: 1
-  documentDbCredentialSecret: documentdb-credentials
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  resource:
-    storage:
-      pvcSize: 10Gi
-  environment: aks
-  clusterReplication:
-    highAvailability: true
-    # Supported values: AzureFleet, Istio, None
-    # Use AzureFleet so the operator can derive the current cluster name via kube-system/cluster-name
-    # (required for multi-cluster service naming); this still works without Azure Fleet itself.
-    crossCloudNetworkingStrategy: AzureFleet
-    primary: member-eastus2
-    clusterList:
-      - name: member-eastus2
-        environment: aks
-      - name: member-westus3
-        environment: aks
-      - name: member-uksouth
-        environment: aks
-  exposeViaService:
-    serviceType: LoadBalancer
-  logLevel: info
----
-# PropagationPolicy for DocumentDB (apply to all clusters)
-apiVersion: policy.karmada.io/v1alpha1
-kind: PropagationPolicy
-metadata:
-  name: documentdb-resource-policy
-  namespace: documentdb-preview-ns
-spec:
-  resourceSelectors:
-    - apiVersion: documentdb.io/preview
-      kind: DocumentDB
-      name: documentdb-preview
-  placement:
-    clusterAffinity:
-      clusterNames:
-        - member-eastus2
-        - member-westus3
-        - member-uksouth
-EOF
+# View the manifest (optional)
+cat $REPO_ROOT/documentdb-playground/karmada-demo/documentdb-karmada.yaml
 
-echo "✓ Manifest created at /tmp/documentdb-karmada.yaml"
 ```
+
+The manifest includes:
+- **Namespace**: `documentdb-preview-ns`
+- **ClusterPropagationPolicy**: Routes the namespace to all 3 clusters
+- **Secret**: Database credentials (`demouser` / `DemoPassword123!`)
+- **PropagationPolicy**: Routes the secret to all 3 clusters
+- **DocumentDB**: The database resource with multi-cluster replication config
+- **PropagationPolicy**: Routes the DocumentDB to all 3 clusters
 
 ### Step 5.2: Deploy to Karmada Control Plane
 
@@ -823,8 +696,9 @@ echo "✓ Manifest created at /tmp/documentdb-karmada.yaml"
 # ═══════════════════════════════════════════════════════════
 # Apply manifest to Karmada control plane
 # ═══════════════════════════════════════════════════════════
-echo "Deploying DocumentDB via Karmada..."
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f /tmp/documentdb-karmada.yaml
+
+sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f $REPO_ROOT/documentdb-playground/karmada-demo/documentdb-karmada.yaml
+
 ```
 
 **Expected Output**:
@@ -848,7 +722,7 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config delete \
   mutatingwebhookconfiguration cnpg-mutating-webhook-configuration 2>/dev/null || true
 
 # Retry
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f /tmp/documentdb-karmada.yaml
+sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f $REPO_ROOT/documentdb-playground/karmada-demo/documentdb-karmada.yaml
 ```
 
 ### Step 5.3: Verify Karmada Propagation
@@ -861,16 +735,24 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f /tmp/do
 # ═══════════════════════════════════════════════════════════
 # Check ResourceBinding (Karmada's propagation tracker)
 # ═══════════════════════════════════════════════════════════
-echo "Checking Karmada ResourceBinding status..."
+
+# Check namespace-scoped resources (Secret, DocumentDB)
 sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get resourcebinding -n documentdb-preview-ns
+
+# Check cluster-scoped resources (Namespace uses ClusterResourceBinding)
+sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get clusterresourcebinding | grep documentdb
+
 ```
 
 **Expected Output**:
 ```
-NAME                                    SCHEDULED   FULLYAPPLIED   AGE
-documentdb-credentials-xxx              True        True           30s
-documentdb-preview-ns-namespace-xxx     True        True           30s
-documentdb-preview-documentdb-xxx       True        True           30s
+# ResourceBinding (namespace-scoped resources)
+NAME                            SCHEDULED   FULLYAPPLIED   AGE
+documentdb-credentials-secret   True        True           30s
+documentdb-preview-documentdb   True        True           30s
+
+# ClusterResourceBinding (cluster-scoped resources like Namespace)
+documentdb-preview-ns-namespace   True        True           30s
 ```
 
 ✅ **Success Indicators**:
@@ -907,7 +789,7 @@ sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config get clusters
 kubectl --context kind-karmada-host logs -n karmada-system -l app=karmada-controller-manager --tail=80
 
 # Quick reconcile kick (safe to rerun)
-sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f /tmp/documentdb-karmada.yaml
+sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f $REPO_ROOT/documentdb-playground/karmada-demo/documentdb-karmada.yaml
 
 ```
 **Expected Output** (for each cluster):
@@ -957,21 +839,22 @@ for i in {1..8}; do
   
   for cluster in member-eastus2 member-westus3 member-uksouth; do
     echo "=== $cluster ==="
-    kubectl --context $cluster get pods -n documentdb-preview-ns 2>/dev/null | grep documentdb-preview || echo "No pods yet..."
+    # Pod names are <cluster-name>-1, not documentdb-preview-1
+    kubectl --context $cluster get pods -n documentdb-preview-ns 2>/dev/null || echo "No pods yet..."
   done
   
-  # Check if all pods are running
-  ready_count=$(kubectl --context member-eastus2 get pods -n documentdb-preview-ns 2>/dev/null | grep "2/2.*Running" | wc -l)
-  ready_count=$((ready_count + $(kubectl --context member-westus3 get pods -n documentdb-preview-ns 2>/dev/null | grep "2/2.*Running" | wc -l)))
-  ready_count=$((ready_count + $(kubectl --context member-uksouth get pods -n documentdb-preview-ns 2>/dev/null | grep "2/2.*Running" | wc -l)))
+  # Check if primary pod is running (pod name format: <cluster-name>-1)
+  ready_count=$(kubectl --context member-eastus2 get pods -n documentdb-preview-ns 2>/dev/null | grep -E "^member-.*2/2.*Running" | wc -l)
+  ready_count=$((ready_count + $(kubectl --context member-westus3 get pods -n documentdb-preview-ns 2>/dev/null | grep -E "^member-.*2/2.*Running" | wc -l)))
+  ready_count=$((ready_count + $(kubectl --context member-uksouth get pods -n documentdb-preview-ns 2>/dev/null | grep -E "^member-.*2/2.*Running" | wc -l)))
   
   if [ "$ready_count" -ge 3 ]; then
-    echo -e "\n✅ All 3 DocumentDB pods are running!"
+    echo -e "All 3 DocumentDB pods are running!"
     break
   fi
   
   if [ $i -lt 8 ]; then
-    echo -e "\n⏳ Waiting 30 seconds..."
+    echo -e "Waiting 30 seconds..."
     sleep 30
   fi
 done
@@ -988,6 +871,7 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   echo "=== $cluster ==="
   kubectl --context $cluster get pods,svc -n documentdb-preview-ns
 done
+
 ```
 
 **Expected Output** (for each cluster after 2-3 minutes):
@@ -1008,9 +892,12 @@ service/documentdb-preview-rw          ClusterIP   10.0.123.47    5432/TCP,10260
 
 🏃 **Fast path to a ready gateway (avoids create-role retries):** Bounce the primary pod once the services exist so the gateway starts cleanly with the already-created role and listens on 10260.
 ```bash
+
 kubectl --context member-eastus2 delete pod member-eastus2-1 -n documentdb-preview-ns
+
 # wait ~30s for the pod to recreate, then confirm the listener:
 kubectl --context member-eastus2 exec -n documentdb-preview-ns member-eastus2-1 -c documentdb-gateway -- sh -c "grep 2814 /proc/net/tcp || true"
+
 ```
 
 🚑 **If mongosh keeps failing and DocumentDB stays in "Failing over":** One replica may be stuck in a `pg_rewind` loop (common log: `permission denied for schema documentdb_core`), which blocks the gateway from binding to 10260. Remove the stuck pod and its PVC so it can resync cleanly from the healthy primary.
@@ -1053,6 +940,7 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   kubectl --context $cluster get documentdb -n documentdb-preview-ns -o wide
   echo ""
 done
+
 ```
 
 **Expected Output** (for each cluster):
@@ -1061,32 +949,87 @@ NAME                 AGE
 documentdb-preview   5m
 ```
 
-### Step 6.2: Connect to DocumentDB (Optional)
+### Step 6.2: Connect to DocumentDB
 
-Each cluster exposes `documentdb-service-<cluster>` as a LoadBalancer on port 10260. Use the secret you created earlier for credentials.
+**Important**: DocumentDB Gateway **requires TLS** - you cannot skip it. The gateway uses a self-signed certificate, so you must allow invalid certificates.
+
+#### Option A: Connect via Port-Forward (Recommended for Testing)
+
+This approach works immediately and doesn't require waiting for LoadBalancer IP assignment.
 
 ```bash
-# Get credentials once
-USER=$(kubectl get secret documentdb-credentials -n documentdb-preview-ns -o jsonpath='{.data.username}' | base64 -d)
-PASS=$(kubectl get secret documentdb-credentials -n documentdb-preview-ns -o jsonpath='{.data.password}' | base64 -d)
+# Terminal 1: Start port-forward to the primary pod
+kubectl --context member-eastus2 port-forward -n documentdb-preview-ns pod/member-eastus2-1 10260:10260
+
+```
+
+```bash
+# Terminal 2: Connect with mongosh
+# Get password from secret
+PASS=$(kubectl --context member-eastus2 get secret documentdb-credentials -n documentdb-preview-ns -o jsonpath='{.data.password}' | base64 -d)
+
+# Test connection with ping (TLS is REQUIRED)
+mongosh --host 127.0.0.1 --port 10260 \
+  -u demouser -p "$PASS" \
+  --tls --tlsAllowInvalidCertificates \
+  --eval "db.runCommand({ping:1})"
+
+```
+
+**Expected Output**:
+```
+{ ok: 1 }
+```
+
+✅ **Success**: `{ ok: 1 }` confirms DocumentDB is working!
+
+#### Option B: Connect via LoadBalancer IP
+
+Each cluster exposes `documentdb-service-<cluster>` as a LoadBalancer on port 10260.
+
+```bash
+# Get credentials
+PASS=$(kubectl --context member-eastus2 get secret documentdb-credentials -n documentdb-preview-ns -o jsonpath='{.data.password}' | base64 -d)
 
 # Choose the cluster you want to reach (primary is member-eastus2)
 TARGET_CLUSTER=member-eastus2
 
-# Get its LoadBalancer IP
+# Get its LoadBalancer IP (may take 1-2 minutes to assign)
 IP=$(kubectl --context $TARGET_CLUSTER get svc documentdb-service-$TARGET_CLUSTER -n documentdb-preview-ns -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
 echo "Connecting to $TARGET_CLUSTER at $IP..."
 
-# Build a Mongo-compatible connection string (DocumentDB Gateway listens on 10260)
-CONN="mongodb://$USER:$PASS@$IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
-echo "$CONN"
+# Connect with mongosh (TLS is REQUIRED)
+mongosh --host $IP --port 10260 \
+  -u demouser -p "$PASS" \
+  --tls --tlsAllowInvalidCertificates \
+  --eval "db.runCommand({ping:1})"
 
-# Optional: connect with mongosh
-mongosh "$CONN"
 ```
 
-If you prefer seeing all clusters at once:
+#### Test Insert and Read Operations
+
+```bash
+# Insert a document and read it back
+mongosh --host 127.0.0.1 --port 10260 \
+  -u demouser -p "$PASS" \
+  --tls --tlsAllowInvalidCertificates \
+  --eval "db.testCollection.insertOne({name: 'karmada-demo', timestamp: new Date()}); db.testCollection.find().toArray()"
+
+```
+
+**Expected Output**:
+```javascript
+{
+  acknowledged: true,
+  insertedId: ObjectId('...')
+}
+[
+  { _id: ObjectId('...'), name: 'karmada-demo', timestamp: ISODate('...') }
+]
+```
+
+#### View All Cluster IPs
 
 ```bash
 for cluster in member-eastus2 member-westus3 member-uksouth; do
@@ -1094,6 +1037,8 @@ for cluster in member-eastus2 member-westus3 member-uksouth; do
   echo "$cluster -> $ip"
 done
 ```
+
+> ⚠️ **Note on TLS**: The `--tls --tlsAllowInvalidCertificates` flags are required. DocumentDB Gateway enforces TLS even if you try to disable it in the spec. The self-signed certificate uses CN=localhost.
 
 ---
 
@@ -1209,9 +1154,13 @@ echo "✅ Cleanup complete!"
 **For Production Deployment**:
 1. **High Availability**: Deploy Karmada control plane on production Kubernetes cluster (not Kind)
 2. **Cross-cluster Networking**: Add Istio or Submariner for cross-cluster service mesh
-3. **Backup & Disaster Recovery**: Configure DocumentDB backups across regions
-4. **Monitoring**: Add Prometheus/Grafana for multi-cluster monitoring
-5. **Security**: Configure RBAC, network policies, and secrets management
+   - Required for cross-region replication to work
+   - Enable `highAvailability: true` only after cross-cluster networking is configured
+3. **Synchronous Replication**: With cross-cluster networking, set `highAvailability: true` for synchronous replication across regions
+4. **Backup & Disaster Recovery**: Configure DocumentDB backups across regions
+5. **Monitoring**: Add Prometheus/Grafana for multi-cluster monitoring
+6. **Security**: Configure RBAC, network policies, and secrets management
+7. **TLS Certificates**: Use cert-manager with proper CA for production TLS certificates
 
 **For Learning More**:
 - Karmada documentation: https://karmada.io/docs/
@@ -1264,6 +1213,43 @@ kubectl --context member-eastus2 describe pod -n documentdb-preview-ns <pod-name
 
 # Check DocumentDB resource status
 kubectl --context member-eastus2 get documentdb -n documentdb-preview-ns -o yaml
+```
+
+**5. Connection refused on port 10260**
+```bash
+# Verify the gateway is listening (0x2814 = 10260 in hex)
+kubectl --context member-eastus2 exec -n documentdb-preview-ns member-eastus2-1 -c documentdb-gateway -- sh -c "grep 2814 /proc/net/tcp6 || echo 'Gateway not listening'"
+
+# Check gateway container logs
+kubectl --context member-eastus2 logs -n documentdb-preview-ns member-eastus2-1 -c documentdb-gateway --tail=50
+
+# If gateway isn't listening, bounce the pod
+kubectl --context member-eastus2 delete pod member-eastus2-1 -n documentdb-preview-ns
+```
+
+**6. TLS connection errors**
+```bash
+# TLS is REQUIRED - always use these flags with mongosh:
+# --tls --tlsAllowInvalidCertificates
+
+# Test TLS handshake directly
+openssl s_client -connect 127.0.0.1:10260 -servername localhost </dev/null 2>/dev/null | head -20
+
+# You should see: subject=CN=localhost (self-signed certificate)
+```
+
+**7. Writes timeout (with highAvailability: true)**
+```bash
+# Check synchronous replication status
+kubectl --context member-eastus2 exec -n documentdb-preview-ns member-eastus2-1 -c postgres -- \
+  psql -U postgres -c "SELECT application_name, state, sync_state FROM pg_stat_replication;"
+
+# Check sync standby config
+kubectl --context member-eastus2 exec -n documentdb-preview-ns member-eastus2-1 -c postgres -- \
+  psql -U postgres -c "SHOW synchronous_standby_names;"
+
+# If writes block, cross-region replicas may not be connected.
+# For demo without cross-cluster networking, set highAvailability: false
 ```
 
 ---

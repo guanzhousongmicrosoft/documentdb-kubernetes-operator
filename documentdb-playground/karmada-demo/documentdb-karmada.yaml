@@ -1,0 +1,119 @@
+# DocumentDB Karmada Deployment Manifest
+# This manifest deploys DocumentDB across multiple clusters via Karmada
+#
+# Resources included:
+#   - Namespace (documentdb-preview-ns)
+#   - Secret (database credentials)
+#   - DocumentDB resource
+#   - PropagationPolicies for each resource
+#
+# Usage:
+#   sudo kubectl --kubeconfig /etc/karmada/karmada-apiserver.config apply -f documentdb-karmada.yaml
+
+# Namespace for DocumentDB
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+---
+# ClusterPropagationPolicy for namespace (Namespace is cluster-scoped)
+apiVersion: policy.karmada.io/v1alpha1
+kind: ClusterPropagationPolicy
+metadata:
+  name: documentdb-namespace-policy
+spec:
+  resourceSelectors:
+    - apiVersion: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+  placement:
+    clusterAffinity:
+      clusterNames:
+        - member-eastus2
+        - member-westus3
+        - member-uksouth
+---
+# Secret with database credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: demouser
+  password: DemoPassword123!
+---
+# PropagationPolicy for secret (apply to all clusters)
+apiVersion: policy.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: documentdb-credentials-policy
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - apiVersion: v1
+      kind: Secret
+      name: documentdb-credentials
+  placement:
+    clusterAffinity:
+      clusterNames:
+        - member-eastus2
+        - member-westus3
+        - member-uksouth
+---
+# DocumentDB resource (multi-cluster)
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: documentdb-credentials
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  resource:
+    storage:
+      pvcSize: 10Gi
+  environment: aks
+  clusterReplication:
+    # Set to false for demo without cross-cluster networking (Istio/Submariner)
+    # When true, synchronous replication requires cross-region replicas to be connected,
+    # which blocks writes if those replicas aren't reachable.
+    highAvailability: false
+    # Supported values in CRD: AzureFleet, Istio, None
+    # Use AzureFleet - the operator uses the kube-system/cluster-name ConfigMap to identify
+    # each cluster. This works for Karmada demos since we create that ConfigMap manually.
+    # (The Go code has "Karmada" support but it's not yet added to the CRD enum.)
+    crossCloudNetworkingStrategy: AzureFleet
+    primary: member-eastus2
+    clusterList:
+      - name: member-eastus2
+        environment: aks
+      - name: member-westus3
+        environment: aks
+      - name: member-uksouth
+        environment: aks
+  exposeViaService:
+    serviceType: LoadBalancer
+  logLevel: info
+---
+# PropagationPolicy for DocumentDB (apply to all clusters)
+apiVersion: policy.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: documentdb-resource-policy
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - apiVersion: documentdb.io/preview
+      kind: DocumentDB
+      name: documentdb-preview
+  placement:
+    clusterAffinity:
+      clusterNames:
+        - member-eastus2
+        - member-westus3
+        - member-uksouth
