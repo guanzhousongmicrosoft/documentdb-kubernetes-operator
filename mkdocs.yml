@@ -32,6 +32,8 @@ nav:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
+      - Getting Started:
+          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
@@ -46,11 +48,16 @@ markdown_extensions:
   - admonition
   - attr_list
   - md_in_html
-  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: true
