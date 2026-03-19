@@ -37,6 +37,7 @@ nav:
       - Getting Started:
           - Before You Start: preview/getting-started/before-you-start.md
           - Deploy on EKS: preview/getting-started/deploy-on-eks.md
+          - Deploy on AKS: preview/getting-started/deploy-on-aks.md
       - Configuration:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
