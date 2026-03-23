@@ -146,13 +146,17 @@ jobs:
         # TODO: Remove once we deprecate combined mode
         echo "USE_COMBINED=$USE_COMBINED" >> $GITHUB_ENV
         
-        # Set OLD images based on the released version
+        # Set initial deployment images and the post-recreation baseline images.
+        # For legacy <= 0.1.3 releases, the initial deployment uses the combined image,
+        # but the recreated ImageVolume cluster must use separate documentdb/gateway images.
         COMBINED_IMAGE="${{ env.DOCUMENTDB_COMBINED_IMAGE }}"
         if [[ "$USE_COMBINED" == "true" ]]; then
-          echo "DOCUMENTDB_OLD_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
-          echo "GATEWAY_OLD_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
           echo "DOCUMENTDB_INITIAL_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
+          echo "GATEWAY_INITIAL_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
+          echo "DOCUMENTDB_OLD_IMAGE=${{ env.DOCUMENTDB_IMAGE }}" >> $GITHUB_ENV
+          echo "GATEWAY_OLD_IMAGE=${{ env.GATEWAY_IMAGE }}" >> $GITHUB_ENV
           echo "✓ Using combined image for initial deployment: $COMBINED_IMAGE"
+          echo "✓ Using built ImageVolume images after recreation: ${{ env.DOCUMENTDB_IMAGE }} / ${{ env.GATEWAY_IMAGE }}"
         else
           # For releases > threshold, use the released version's extension images
           RELEASED_DOCDB_VERSION=$(helm show values documentdb/documentdb-operator --version "$RESOLVED_VERSION" 2>/dev/null | grep '^documentDbVersion:' | awk '{print $2}' | tr -d '"' || echo "")
@@ -164,6 +168,7 @@ jobs:
           echo "DOCUMENTDB_OLD_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
           echo "GATEWAY_OLD_IMAGE=$OLD_GW" >> $GITHUB_ENV
           echo "DOCUMENTDB_INITIAL_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
+          echo "GATEWAY_INITIAL_IMAGE=$OLD_GW" >> $GITHUB_ENV
           echo "✓ Using extension images for initial deployment: $OLD_DOCDB / $OLD_GW"
         fi
 
@@ -179,6 +184,8 @@ jobs:
           echo "- **Image Tag**: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
         fi
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Initial Extension Image**: \`${{ env.DOCUMENTDB_INITIAL_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Initial Gateway Image**: \`${{ env.GATEWAY_INITIAL_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Old Extension Image**: \`${{ env.DOCUMENTDB_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **New Extension Image**: \`${{ env.DOCUMENTDB_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Combined Image**: \`${{ env.DOCUMENTDB_COMBINED_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
@@ -204,7 +211,7 @@ jobs:
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
         documentdb-image: ${{ env.DOCUMENTDB_INITIAL_IMAGE }}
-        gateway-image: ${{ env.GATEWAY_OLD_IMAGE }}
+        gateway-image: ${{ env.GATEWAY_INITIAL_IMAGE }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         released-chart-version: ${{ env.RELEASED_CHART_VERSION }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
