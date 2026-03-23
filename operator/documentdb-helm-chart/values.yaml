@@ -1,10 +1,11 @@
 namespace: documentdb-operator
 replicaCount: 1
 
-# DocumentDB version - global default for all components when individual tags are not set
-# Priority: individual component tag > documentDbVersion > Chart.appVersion
-# Defaults to Chart.appVersion if not specified  
-documentDbVersion: ""
+# documentDbVersion controls which documentdb/gateway image version the operator uses at runtime.
+# It is passed as the DOCUMENTDB_VERSION env var to operator and sidecar containers.
+# Operator/sidecar/walreplica container images use their own tag or Chart.appVersion.
+# Priority for runtime documentdb/gateway images: CRD spec field > DOCUMENTDB_VERSION env > hardcoded default
+documentDbVersion: "0.110.0"
 
 # Gateway image pull policy for the gateway sidecar container.
 # Valid values: Always, IfNotPresent, Never. Defaults to IfNotPresent if not set.

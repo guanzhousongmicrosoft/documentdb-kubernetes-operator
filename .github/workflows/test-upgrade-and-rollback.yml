@@ -101,34 +101,10 @@ jobs:
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}"
         fi
-        OLD_DOCDB="$NEW_DOCDB"
-        OLD_GW="$NEW_GW"
         echo "DOCUMENTDB_IMAGE=$NEW_DOCDB" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE=$NEW_GW" >> $GITHUB_ENV
-        echo "DOCUMENTDB_OLD_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
-        echo "GATEWAY_OLD_IMAGE=$OLD_GW" >> $GITHUB_ENV
-        echo "Old DocumentDB image: $OLD_DOCDB"
-        echo "Old Gateway image: $OLD_GW"
         echo "New DocumentDB image: $NEW_DOCDB"
         echo "New Gateway image: $NEW_GW"
-
-    - name: Log test configuration
-      run: |
-        echo "## Upgrade & Rollback Test Configuration" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if [[ -n "${{ inputs.image_tag }}" ]]; then
-          echo "- **Mode**: Using provided image tag" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image Tag**: \`${{ inputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "- **Mode**: Using locally built images" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image Tag**: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Old Extension Image**: \`${{ env.DOCUMENTDB_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **New Extension Image**: \`${{ env.DOCUMENTDB_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Combined Image**: \`${{ env.DOCUMENTDB_COMBINED_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Old Gateway Image**: \`${{ env.GATEWAY_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **New Gateway Image**: \`${{ env.GATEWAY_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
 
     # TODO: Remove this step once release versions > 0.1.3 
     - name: Determine initial DocumentDB image
@@ -170,18 +146,44 @@ jobs:
         # TODO: Remove once we deprecate combined mode
         echo "USE_COMBINED=$USE_COMBINED" >> $GITHUB_ENV
         
-        # Set the initial image based on determination
+        # Set OLD images based on the released version
         COMBINED_IMAGE="${{ env.DOCUMENTDB_COMBINED_IMAGE }}"
-        EXTENSION_IMAGE="${{ env.DOCUMENTDB_OLD_IMAGE }}"
         if [[ "$USE_COMBINED" == "true" ]]; then
-          echo "DOCUMENTDB_INITIAL_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
-          # In combined mode, the gateway is part of the combined image
+          echo "DOCUMENTDB_OLD_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
           echo "GATEWAY_OLD_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
+          echo "DOCUMENTDB_INITIAL_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
           echo "✓ Using combined image for initial deployment: $COMBINED_IMAGE"
         else
-          echo "DOCUMENTDB_INITIAL_IMAGE=$EXTENSION_IMAGE" >> $GITHUB_ENV
-          echo "✓ Using extension image for initial deployment: $EXTENSION_IMAGE"
+          # For releases > threshold, use the released version's extension images
+          RELEASED_DOCDB_VERSION=$(helm show values documentdb/documentdb-operator --version "$RESOLVED_VERSION" 2>/dev/null | grep '^documentDbVersion:' | awk '{print $2}' | tr -d '"' || echo "")
+          if [[ -z "$RELEASED_DOCDB_VERSION" ]]; then
+            RELEASED_DOCDB_VERSION="$RESOLVED_VERSION"
+          fi
+          OLD_DOCDB="ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:${RELEASED_DOCDB_VERSION}"
+          OLD_GW="ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:${RELEASED_DOCDB_VERSION}"
+          echo "DOCUMENTDB_OLD_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
+          echo "GATEWAY_OLD_IMAGE=$OLD_GW" >> $GITHUB_ENV
+          echo "DOCUMENTDB_INITIAL_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
+          echo "✓ Using extension images for initial deployment: $OLD_DOCDB / $OLD_GW"
         fi
+
+    - name: Log test configuration
+      run: |
+        echo "## Upgrade & Rollback Test Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [[ -n "${{ inputs.image_tag }}" ]]; then
+          echo "- **Mode**: Using provided image tag" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: \`${{ inputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Mode**: Using locally built images" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Old Extension Image**: \`${{ env.DOCUMENTDB_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **New Extension Image**: \`${{ env.DOCUMENTDB_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Combined Image**: \`${{ env.DOCUMENTDB_COMBINED_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Old Gateway Image**: \`${{ env.GATEWAY_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **New Gateway Image**: \`${{ env.GATEWAY_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
 
     - name: Setup test environment
       uses: ./.github/actions/setup-test-environment

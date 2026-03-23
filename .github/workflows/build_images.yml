@@ -7,6 +7,10 @@ on:
         description: 'Version for the build (will be tagged as {version}-test)'
         required: false
         default: '0.1.1'
+      documentdb_image_version:
+        description: 'Version for documentdb and gateway images (will be tagged as {version}-test)'
+        required: false
+        default: '0.110.0'
       skip_optional_images:
         type: boolean
         description: 'Skip building documentdb and gateway images'
@@ -31,6 +35,8 @@ permissions:
 env:
   VERSION: ${{ github.event.inputs.version || '0.1.1' }}
   IMAGE_TAG: ${{ github.event.inputs.version || '0.1.1' }}-test
+  DOCUMENTDB_IMAGE_VERSION: ${{ github.event.inputs.documentdb_image_version || '0.110.0' }}
+  DOCUMENTDB_IMAGE_TAG: ${{ github.event.inputs.documentdb_image_version || '0.110.0' }}-test
   DOCUMENTDB_REPO: documentdb/documentdb
   DOCUMENTDB_REPO_REF: ${{ github.event.inputs.documentdb_ref || 'main' }}
 
@@ -174,7 +180,12 @@ jobs:
       if: steps.should_build.outputs.skip != 'true'
       run: |
         set -euo pipefail
-        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+        # Use DOCUMENTDB_IMAGE_TAG for documentdb/gateway, IMAGE_TAG for operator/sidecar
+        case "${{ matrix.image.name }}" in
+          documentdb|gateway) BASE_TAG=${{ env.DOCUMENTDB_IMAGE_TAG }} ;;
+          *)                  BASE_TAG=${{ env.IMAGE_TAG }} ;;
+        esac
+        TAG=${BASE_TAG}-${{ matrix.arch }}
         IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
 
         BUILD_ARGS=""
@@ -227,6 +238,9 @@ jobs:
       VERSION: ${{ github.event.inputs.version || '0.1.1' }}
       MANIFEST_TAG: ${{ github.event.inputs.version || '0.1.1' }}-test
       IMAGE_TAG: ${{ github.event.inputs.version || '0.1.1' }}-test
+      DOCUMENTDB_IMAGE_VERSION: ${{ github.event.inputs.documentdb_image_version || '0.110.0' }}
+      DOCUMENTDB_MANIFEST_TAG: ${{ github.event.inputs.documentdb_image_version || '0.110.0' }}-test
+      DOCUMENTDB_IMAGE_TAG: ${{ github.event.inputs.documentdb_image_version || '0.110.0' }}-test
     steps:
     - name: Check if image was built
       id: check
@@ -250,24 +264,37 @@ jobs:
     - name: Create and Push Manifest
       if: steps.check.outputs.skip != 'true'
       run: |
-        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.MANIFEST_TAG }} \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
-        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.MANIFEST_TAG }}
+        # Use DOCUMENTDB_MANIFEST_TAG for documentdb/gateway, MANIFEST_TAG for operator/sidecar
+        case "${{ matrix.image }}" in
+          documentdb|gateway) EFFECTIVE_MANIFEST_TAG=${{ env.DOCUMENTDB_MANIFEST_TAG }}; EFFECTIVE_IMAGE_TAG=${{ env.DOCUMENTDB_IMAGE_TAG }} ;;
+          *)                  EFFECTIVE_MANIFEST_TAG=${{ env.MANIFEST_TAG }}; EFFECTIVE_IMAGE_TAG=${{ env.IMAGE_TAG }} ;;
+        esac
+        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${EFFECTIVE_MANIFEST_TAG} \
+          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${EFFECTIVE_IMAGE_TAG}-amd64 \
+          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${EFFECTIVE_IMAGE_TAG}-arm64
+        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${EFFECTIVE_MANIFEST_TAG}
     - name: Install cosign
       if: steps.check.outputs.skip != 'true'
       uses: sigstore/cosign-installer@main
     - name: Sign manifest (keyless)
       if: steps.check.outputs.skip != 'true'
       run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.MANIFEST_TAG }} \
+        case "${{ matrix.image }}" in
+          documentdb|gateway) EFFECTIVE_MANIFEST_TAG=${{ env.DOCUMENTDB_MANIFEST_TAG }} ;;
+          *)                  EFFECTIVE_MANIFEST_TAG=${{ env.MANIFEST_TAG }} ;;
+        esac
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${EFFECTIVE_MANIFEST_TAG} \
           | awk '/^Digest:/ { print $2 }')
         echo "Signing manifest-list@${DIGEST}"
         cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
     - name: Verify manifest signature (keyless)
       if: steps.check.outputs.skip != 'true'
       run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.MANIFEST_TAG }} \
+        case "${{ matrix.image }}" in
+          documentdb|gateway) EFFECTIVE_MANIFEST_TAG=${{ env.DOCUMENTDB_MANIFEST_TAG }} ;;
+          *)                  EFFECTIVE_MANIFEST_TAG=${{ env.MANIFEST_TAG }} ;;
+        esac
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${EFFECTIVE_MANIFEST_TAG} \
           | awk '/^Digest:/ { print $2 }')
         cosign verify \
           --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_images.yml@${{ github.ref }}" \

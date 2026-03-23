@@ -485,6 +485,10 @@ jobs:
         sed -i "s|^appVersion:.*|appVersion: \"${{ env.CHART_VERSION }}-${{ matrix.arch }}\"|g" documentdb-chart-${{ matrix.arch }}/Chart.yaml
         sed -i "s|^name:.*|name: documentdb-chart|g" documentdb-chart-${{ matrix.arch }}/Chart.yaml
         
+        # Override documentDbVersion so the operator uses matching test image tags
+        # for documentdb/gateway images instead of the source default (0.110.0)
+        sed -i "s|^documentDbVersion:.*|documentDbVersion: \"${{ env.CHART_VERSION }}-${{ matrix.arch }}\"|g" documentdb-chart-${{ matrix.arch }}/values.yaml
+        
         echo "Updated Chart.yaml for ${{ matrix.arch }}:"
         cat documentdb-chart-${{ matrix.arch }}/Chart.yaml
         

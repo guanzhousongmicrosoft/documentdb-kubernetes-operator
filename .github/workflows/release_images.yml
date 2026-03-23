@@ -4,13 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       candidate_version:
-        description: 'Version of the build candidate to promote (will be tagged as {version})'
+        description: 'Candidate version for operator/sidecar images (will be tagged as {version})'
         required: true
         default: '0.1.1-test'
       version:
-        description: 'Version to release (used for images and Helm chart)'
+        description: 'Release version for operator/sidecar images and Helm chart'
         required: true
         default: '0.1.1'
+      documentdb_candidate_version:
+        description: 'Candidate version for documentdb/gateway images'
+        required: true
+        default: '0.110.0-test'
+      documentdb_version:
+        description: 'Release version for documentdb/gateway images'
+        required: true
+        default: '0.110.0'
       source_ref:
         description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
         required: true
@@ -65,14 +73,22 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Retag existing manifest
-        env:
-          SOURCE_TAG: ${{ github.event.inputs.candidate_version }}
-          TARGET_TAG: ${{ github.event.inputs.version }}
         run: |
+          # Use documentdb-specific versions for documentdb/gateway images
+          case "${{ matrix.image }}" in
+            documentdb|gateway)
+              SOURCE_TAG="${{ github.event.inputs.documentdb_candidate_version }}"
+              TARGET_TAG="${{ github.event.inputs.documentdb_version }}"
+              ;;
+            *)
+              SOURCE_TAG="${{ github.event.inputs.candidate_version }}"
+              TARGET_TAG="${{ github.event.inputs.version }}"
+              ;;
+          esac
           echo "Releasing ${{ matrix.image }} image from tag $SOURCE_TAG to $TARGET_TAG"
           docker buildx imagetools create \
-            -t ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.TARGET_TAG }} \
-            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.SOURCE_TAG }}
+            -t ghcr.io/${{ github.repository }}/${{ matrix.image }}:${TARGET_TAG} \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${SOURCE_TAG}
 
   publish-helm-chart:
     name: Publish Helm Chart
@@ -110,6 +126,7 @@ jobs:
         run: |
           sed -i "s/^version: .*/version: ${CHART_VERSION}/" operator/documentdb-helm-chart/Chart.yaml
           sed -i "s/^appVersion: .*/appVersion: \"${CHART_VERSION}\"/" operator/documentdb-helm-chart/Chart.yaml
+          sed -i "s/^documentDbVersion: .*/documentDbVersion: \"${{ github.event.inputs.documentdb_version }}\"/" operator/documentdb-helm-chart/values.yaml
 
       - name: Package Helm chart
         run: |
@@ -129,13 +146,13 @@ jobs:
           echo "## Helm Chart Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart Name**: \`$CHART_NAME\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: \`$CHART_VERSION\` (unified for chart and images)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chart Version**: \`$CHART_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Operator/Sidecar Image Version**: \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **DocumentDB/Gateway Image Version**: \`${{ github.event.inputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart Source Ref**: \`${{ github.event.inputs.source_ref }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Source Tag**: \`${{ github.event.inputs.candidate_version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target Tag**: \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Operator Source Tag**: \`${{ github.event.inputs.candidate_version }}\` → \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **DocumentDB Source Tag**: \`${{ github.event.inputs.documentdb_candidate_version }}\` → \`${{ github.event.inputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: \`$GHCR_REPO\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Note**: Images promoted from \`${{ github.event.inputs.candidate_version }}\` to \`${{ github.event.inputs.version }}\` and Helm chart published" >> $GITHUB_STEP_SUMMARY
 
   publish-helm-pages:
     name: Publish Helm Repository
