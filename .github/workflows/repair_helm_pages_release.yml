@@ -172,28 +172,28 @@ jobs:
           set -euo pipefail
           test -f "${CHART_PATH}"
           ruby <<'RUBY'
-require "yaml"
-
-chart = YAML.load_file(ENV.fetch("CHART_PATH"))
-version = ENV.fetch("VERSION")
-expected = ENV["EXPECTED_CNPG_VERSION"]
-release_ref = ENV.fetch("RELEASE_REF")
-normalize_chart_metadata = ENV.fetch("NORMALIZE_CHART_METADATA") == "true"
-source_version = chart["version"]
-
-if source_version != version
-  if normalize_chart_metadata
-    puts "::notice::Chart.yaml version #{source_version.inspect} from #{release_ref.inspect} will be normalized to #{version.inspect} during packaging."
-  else
-    abort("::error::Chart.yaml version #{source_version.inspect} does not match #{version.inspect}. Rerun with normalize_chart_metadata=true if this source ref intentionally needs release metadata normalization.")
-  end
-end
-
-if expected && !expected.empty?
-  dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
-  abort("::error::Chart.yaml does not pin cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
-end
-RUBY
+          require "yaml"
+          
+          chart = YAML.load_file(ENV.fetch("CHART_PATH"))
+          version = ENV.fetch("VERSION")
+          expected = ENV["EXPECTED_CNPG_VERSION"]
+          release_ref = ENV.fetch("RELEASE_REF")
+          normalize_chart_metadata = ENV.fetch("NORMALIZE_CHART_METADATA") == "true"
+          source_version = chart["version"]
+          
+          if source_version != version
+            if normalize_chart_metadata
+              puts "::notice::Chart.yaml version #{source_version.inspect} from #{release_ref.inspect} will be normalized to #{version.inspect} during packaging."
+            else
+              abort("::error::Chart.yaml version #{source_version.inspect} does not match #{version.inspect}. Rerun with normalize_chart_metadata=true if this source ref intentionally needs release metadata normalization.")
+            end
+          end
+          
+          if expected && !expected.empty?
+            dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
+            abort("::error::Chart.yaml does not pin cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
+          end
+          RUBY
 
       - name: Normalize chart metadata for packaged release
         working-directory: source
@@ -214,14 +214,14 @@ RUBY
           mkdir -p build live backups/live-artifacts
           if curl -fsSL "${REPO_URL}/index.yaml" -o live/index.yaml; then
             ruby <<'RUBY' > live/chart-urls.txt
-require "yaml"
-
-data = YAML.load_file("live/index.yaml")
-entries = data.fetch("entries", {})
-urls = entries.values.flatten.flat_map { |entry| Array(entry["urls"]) }.uniq
-
-puts urls
-RUBY
+          require "yaml"
+          
+          data = YAML.load_file("live/index.yaml")
+          entries = data.fetch("entries", {})
+          urls = entries.values.flatten.flat_map { |entry| Array(entry["urls"]) }.uniq
+          
+          puts urls
+          RUBY
           else
             printf 'apiVersion: v1\nentries: {}\n' > live/index.yaml
             : > live/chart-urls.txt
@@ -252,20 +252,20 @@ RUBY
           helm package "${CHART_DIR}" --version "${VERSION}" --app-version "${VERSION}" --destination ../build
           helm show chart "../build/documentdb-operator-${VERSION}.tgz" > "${PACKAGED_CHART_METADATA}"
           ruby <<'RUBY'
-require "yaml"
-
-chart = YAML.load_file(ENV.fetch("PACKAGED_CHART_METADATA"))
-version = ENV.fetch("VERSION")
-expected = ENV["EXPECTED_CNPG_VERSION"]
-
-abort("::error::Packaged chart version #{chart["version"].inspect} does not match #{version.inspect}.") unless chart["version"] == version
-abort("::error::Packaged chart appVersion #{chart["appVersion"].inspect} does not match #{version.inspect}.") unless chart["appVersion"] == version
-
-if expected && !expected.empty?
-  dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
-  abort("::error::Packaged chart does not include cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
-end
-RUBY
+          require "yaml"
+          
+          chart = YAML.load_file(ENV.fetch("PACKAGED_CHART_METADATA"))
+          version = ENV.fetch("VERSION")
+          expected = ENV["EXPECTED_CNPG_VERSION"]
+          
+          abort("::error::Packaged chart version #{chart["version"].inspect} does not match #{version.inspect}.") unless chart["version"] == version
+          abort("::error::Packaged chart appVersion #{chart["appVersion"].inspect} does not match #{version.inspect}.") unless chart["appVersion"] == version
+          
+          if expected && !expected.empty?
+            dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
+            abort("::error::Packaged chart does not include cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
+          end
+          RUBY
 
       - name: Rebuild Helm repository files
         env:
@@ -276,15 +276,15 @@ RUBY
           cp "build/documentdb-operator-${VERSION}.tgz" "pages/documentdb-operator-${VERSION}.tgz"
           helm repo index pages --url "${REPO_URL}" --merge live/index.yaml
           ruby <<'RUBY'
-require "yaml"
-
-data = YAML.load_file("pages/index.yaml")
-version = ENV.fetch("VERSION")
-entries = Array(data.fetch("entries", {}).fetch("documentdb-operator", []))
-entry = entries.find { |item| item["version"] == version }
-
-abort("::error::Generated index.yaml is missing documentdb-operator #{version.inspect}.") unless entry
-RUBY
+          require "yaml"
+          
+          data = YAML.load_file("pages/index.yaml")
+          version = ENV.fetch("VERSION")
+          entries = Array(data.fetch("entries", {}).fetch("documentdb-operator", []))
+          entry = entries.find { |item| item["version"] == version }
+          
+          abort("::error::Generated index.yaml is missing documentdb-operator #{version.inspect}.") unless entry
+          RUBY
 
       - name: Summarize repair preview
         env:
