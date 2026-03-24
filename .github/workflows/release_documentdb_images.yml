@@ -9,9 +9,8 @@ on:
   workflow_dispatch:
     inputs:
       candidate_version:
-        description: 'Database candidate tag to promote (e.g., 0.111.0-test)'
+        description: 'Database candidate tag to promote (e.g., 0.111.0-build-123456789-1-deadbee)'
         required: true
-        default: '0.109.0-test'
       version:
         description: 'Database image release version (e.g., 0.111.0)'
         required: true

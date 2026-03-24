@@ -206,7 +206,7 @@ Builds documentdb extension and gateway images from public DocumentDB release ar
 | **Trigger** | `workflow_dispatch`, `repository_dispatch` (from upstream) |
 | **Images** | documentdb, gateway |
 | **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_public_image` |
-| **Tag pattern** | `{documentdb_version}-test` (candidate) |
+| **Tag pattern** | `{documentdb_version}-build-{run_id}-{attempt}-{sha}` (candidate) |
 | **Build time** | ~5 minutes (public artifact download + image build) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
@@ -284,7 +284,7 @@ Promotes documentdb/gateway candidate images and auto-creates a PR to update def
 
 ```
 Inputs:
-  candidate_version: "0.111.0-test"   ← source tag
+  candidate_version: "0.111.0-build-123456789-1-deadbee"   ← source tag
   version: "0.111.0"                  ← target release tag
   update_defaults: true               ← create PR to bump versions
 
