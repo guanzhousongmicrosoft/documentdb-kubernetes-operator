@@ -44,8 +44,8 @@ All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/
 
 | Image | GHCR Path | Source | Dockerfile | Purpose |
 |-------|-----------|--------|------------|---------|
-| **documentdb** | `.../documentdb` | `.deb` from `documentdb/documentdb` | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
-| **gateway** | `.../gateway` | `.deb` from `documentdb/documentdb` | `.github/dockerfiles/Dockerfile_gateway_deb` | MongoDB wire-protocol gateway binary (Rust) |
+| **documentdb** | `.../documentdb` | Public `deb13` PostgreSQL 18 package from `documentdb/documentdb` releases | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
+| **gateway** | `.../gateway` | Public gateway payload copied from `ghcr.io/documentdb/documentdb/documentdb-local:pg17-<version>` | `.github/dockerfiles/Dockerfile_gateway_public_image` | MongoDB wire-protocol gateway binary (Rust) |
 
 ### External Image (Not Built Here)
 
@@ -64,10 +64,10 @@ The two version tracks are **independent** — they follow different release cad
 | **Images** | operator, sidecar, wal-replica | documentdb, gateway |
 | **Source repo** | This repo (Go) | `documentdb/documentdb` (C + Rust) |
 | **Version source** | `Chart.appVersion` in `Chart.yaml` | `documentDbVersion` in `values.yaml` |
-| **Current version** | `0.1.3` | `0.110.0` |
+| **Current version** | `0.1.3` | `0.109.0` |
 | **Build workflow** | `build_operator_images.yml` | `build_documentdb_images.yml` |
 | **Release workflow** | `release_operator.yml` | `release_documentdb_images.yml` |
-| **Tag example** | `ghcr.io/.../operator:0.1.3` | `ghcr.io/.../documentdb:0.110.0` |
+| **Tag example** | `ghcr.io/.../operator:0.1.3` | `ghcr.io/.../documentdb:0.109.0` |
 
 ### Why Two Tracks?
 
@@ -148,7 +148,7 @@ appVersion: "0.1.3"       # Default tag for operator/sidecar/wal-replica images
 
 ```yaml
 # Database image version (extension + gateway) — independent of Chart.appVersion
-documentDbVersion: "0.110.0"
+documentDbVersion: "0.109.0"
 
 image:
   documentdbk8soperator:
@@ -199,25 +199,25 @@ Builds operator and sidecar images from this repo's Go source.
 
 ### Database Image Build (`build_documentdb_images.yml`)
 
-Builds documentdb extension and gateway images from upstream `.deb` packages.
+Builds documentdb extension and gateway images from public DocumentDB release artifacts.
 
 | Aspect | Details |
 |--------|---------|
 | **Trigger** | `workflow_dispatch`, `repository_dispatch` (from upstream) |
 | **Images** | documentdb, gateway |
-| **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_deb` |
+| **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_public_image` |
 | **Tag pattern** | `{documentdb_version}-test` (candidate) |
-| **Build time** | ~15+ minutes (C/Rust .deb compilation) |
+| **Build time** | ~5 minutes (public artifact download + image build) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
-| **Version detection** | Auto-extracted from `pg_documentdb_core/documentdb_core.control` |
+| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.109.0`) |
 
 The build process:
-1. Checks out `documentdb/documentdb` at a configurable git ref
-2. Runs `./packaging/build_packages.sh` to produce extension `.deb`
-3. Runs `./packaging/build_gateway_packages.sh` to produce gateway `.deb`
-4. Builds `Dockerfile_extension` using the extension `.deb` (installs pg_cron, pgvector, postgis alongside)
-5. Builds `Dockerfile_gateway_deb` using the gateway `.deb`
+1. Resolves the released DocumentDB version to package
+2. Downloads the public `deb13` PostgreSQL 18 extension package from `documentdb/documentdb` release assets
+3. Verifies the public multi-arch `documentdb-local:pg17-<version>` image exists
+4. Builds `Dockerfile_extension` using the public extension `.deb` (installs pg_cron, pgvector, postgis alongside)
+5. Builds `Dockerfile_gateway_public_image` by copying the gateway binary and runtime files from the public upstream image
 
 ### Dockerfile Details
 
@@ -240,11 +240,12 @@ The build process:
 - Copies only extension artifacts (`.so`, `.control`, `.sql`, bitcode) and required system libraries
 - Resolves Debian-alternatives symlinks (they break in ImageVolume mode)
 
-#### Gateway (`.github/dockerfiles/Dockerfile_gateway_deb`)
+#### Gateway (`.github/dockerfiles/Dockerfile_gateway_public_image`)
 - **Base**: `debian:trixie-slim`
-- **Single stage**
+- **Multi-stage**: public `documentdb-local` source image → slim runtime image
 - **Entrypoint**: `/bin/bash /home/documentdb/gateway/scripts/gateway_entrypoint.sh`
 - Runs as non-root `documentdb` user (UID 1000)
+- Copies `documentdb_gateway`, `SetupConfiguration.json`, and `utils.sh` from the upstream public image
 
 ---
 
@@ -367,11 +368,11 @@ When bumping database image versions, the following locations must be updated (a
 
 | File | Field | Example |
 |------|-------|---------|
-| `operator/src/internal/utils/constants.go` | `DEFAULT_DOCUMENTDB_IMAGE` | `...documentdb:0.110.0` |
-| `operator/src/internal/utils/constants.go` | `DEFAULT_GATEWAY_IMAGE` | `...gateway:0.110.0` |
-| `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.110.0` |
-| `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.110.0"` |
-| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.110.0` |
+| `operator/src/internal/utils/constants.go` | `DEFAULT_DOCUMENTDB_IMAGE` | `...documentdb:0.109.0` |
+| `operator/src/internal/utils/constants.go` | `DEFAULT_GATEWAY_IMAGE` | `...gateway:0.109.0` |
+| `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.109.0` |
+| `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.109.0"` |
+| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.109.0` |
 
 When bumping operator versions, update:
 

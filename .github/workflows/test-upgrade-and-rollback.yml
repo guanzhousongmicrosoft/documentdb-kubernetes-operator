@@ -43,6 +43,8 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
+  RELEASED_DATABASE_VERSION: 0.109.0
+  RELEASED_DATABASE_OWNER: documentdb
 
 jobs:
   build:
@@ -93,7 +95,11 @@ jobs:
 
     - name: Determine new DocumentDB and Gateway image references
       run: |
-        # Keep upgrade/rollback workflow self-contained by using images from this run.
+        # Old images should always come from the latest released public database baseline.
+        OLD_DOCDB="ghcr.io/${{ env.RELEASED_DATABASE_OWNER }}/documentdb-kubernetes-operator/documentdb:${{ env.RELEASED_DATABASE_VERSION }}"
+        OLD_GW="ghcr.io/${{ env.RELEASED_DATABASE_OWNER }}/documentdb-kubernetes-operator/gateway:${{ env.RELEASED_DATABASE_VERSION }}"
+
+        # New images come from this workflow run (self-built) or from the provided candidate tag.
         if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
@@ -101,8 +107,6 @@ jobs:
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}"
         fi
-        OLD_DOCDB="$NEW_DOCDB"
-        OLD_GW="$NEW_GW"
         echo "DOCUMENTDB_IMAGE=$NEW_DOCDB" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE=$NEW_GW" >> $GITHUB_ENV
         echo "DOCUMENTDB_OLD_IMAGE=$OLD_DOCDB" >> $GITHUB_ENV
@@ -124,6 +128,7 @@ jobs:
           echo "- **Image Tag**: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
         fi
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Released Database Baseline**: \`${{ env.RELEASED_DATABASE_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Old Extension Image**: \`${{ env.DOCUMENTDB_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **New Extension Image**: \`${{ env.DOCUMENTDB_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Combined Image**: \`${{ env.DOCUMENTDB_COMBINED_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY

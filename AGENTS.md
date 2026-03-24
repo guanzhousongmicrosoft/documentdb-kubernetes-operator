@@ -72,10 +72,10 @@ The project uses **two independent version tracks** for container images:
 | Track | Images | Version Source | Tag Example |
 |-------|--------|---------------|-------------|
 | **Operator** | operator, sidecar, wal-replica | `Chart.appVersion` | `0.1.3` |
-| **Database** | documentdb (extension), gateway | `values.yaml` → `documentDbVersion` | `0.110.0` |
+| **Database** | documentdb (extension), gateway | `values.yaml` → `documentDbVersion` | `0.109.0` |
 
 - Operator images are built from this repo's Go source
-- Database images are built from upstream `documentdb/documentdb` `.deb` packages
+- Database images are built from public `documentdb/documentdb` release artifacts (extension `.deb` + gateway payload from `documentdb-local`)
 - Each track has its own build and release workflows
 - Database image defaults are also hardcoded in `constants.go` and `config.go` as fallbacks
 

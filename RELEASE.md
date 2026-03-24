@@ -78,7 +78,7 @@ After the PR is approved and merged:
 
 Database images follow an **independent release cycle** from the operator:
 
-1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the upstream `documentdb_ref`
+1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the released DocumentDB `version`
 2. Run **"RELEASE - Promote DocumentDB Images"** (`release_documentdb_images.yml`) to promote and auto-create a PR that bumps default image versions across the codebase
 
 > **Note:** The deprecated combined workflows (`build_images.yml`, `release_images.yml`) are still available but will be removed in a future release.

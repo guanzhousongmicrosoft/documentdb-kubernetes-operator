@@ -1,20 +1,18 @@
 name: RELEASE - Build DocumentDB Candidate Images
 
-# Builds documentdb extension and gateway images from upstream documentdb/documentdb .deb packages.
+# Builds documentdb extension and gateway images from public DocumentDB release artifacts.
+# - documentdb image: public deb13 PostgreSQL 18 extension package
+# - gateway image: public documentdb-local image payload
 # These images follow the DATABASE version track (documentDbVersion in values.yaml).
 # For operator/sidecar images, see build_operator_images.yml.
 
 on:
   workflow_dispatch:
     inputs:
-      documentdb_ref:
-        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages'
-        required: false
-        default: 'main'
       version:
-        description: 'Image version tag override (auto-detected from source if empty)'
+        description: 'Released DocumentDB version to package (for example 0.109.0)'
         required: false
-        default: ''
+        default: '0.109.0'
 
   repository_dispatch:
     types: [documentdb-release]
@@ -25,88 +23,72 @@ permissions:
   id-token: write
 
 env:
-  DOCUMENTDB_REPO: documentdb/documentdb
-  DOCUMENTDB_REPO_REF: ${{ github.event.inputs.documentdb_ref || github.event.client_payload.ref || 'main' }}
+  DEFAULT_DOCUMENTDB_VERSION: '0.109.0'
+  DOCUMENTDB_RELEASE_REPO: documentdb/documentdb
+  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/documentdb/documentdb/documentdb-local
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Build DocumentDB extension and gateway deb packages (per-arch)
+  # Resolve public release artifacts
   # ---------------------------------------------------------------------------
-  build-packages:
-    name: Build Packages (${{ matrix.arch }})
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-        include:
-          - arch: amd64
-            runner: ubuntu-22.04
-          - arch: arm64
-            runner: ubuntu-22.04-arm
-    runs-on: ${{ matrix.runner }}
+  resolve-public-artifacts:
+    name: Resolve Public DocumentDB Sources
+    runs-on: ubuntu-22.04
     outputs:
       documentdb_version: ${{ steps.version.outputs.documentdb_version }}
-      image_tag: ${{ steps.tag.outputs.image_tag }}
+      documentdb_version_dash: ${{ steps.version.outputs.documentdb_version_dash }}
+      image_tag: ${{ steps.version.outputs.image_tag }}
+      gateway_source_image: ${{ steps.version.outputs.gateway_source_image }}
     steps:
-    - name: Checkout documentdb source
-      uses: actions/checkout@v4
-      with:
-        repository: ${{ env.DOCUMENTDB_REPO }}
-        ref: ${{ env.DOCUMENTDB_REPO_REF }}
-
-    - name: Extract version from source
+    - name: Resolve released DocumentDB version
       id: version
       run: |
-        DOCDB_VERSION=$(grep -E "^default_version" pg_documentdb_core/documentdb_core.control \
-          | sed -E "s/.*'([0-9]+\.[0-9]+-[0-9]+)'.*/\1/" | sed "s/-/./g")
-        echo "documentdb_version=$DOCDB_VERSION" >> $GITHUB_OUTPUT
-        echo "DocumentDB version: $DOCDB_VERSION"
-
-    - name: Determine image tag
-      id: tag
-      run: |
-        # Use explicit version input if provided, otherwise auto-detect from source
-        VERSION="${{ github.event.inputs.version || github.event.client_payload.version }}"
-        if [[ -z "$VERSION" ]]; then
-          VERSION="${{ steps.version.outputs.documentdb_version }}"
+        set -euo pipefail
+        RAW_VERSION="${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
+        if [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+          VERSION="${RAW_VERSION/-/.}"
+        else
+          VERSION="$RAW_VERSION"
         fi
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Version must use dotted semver format (for example 0.109.0), got: $RAW_VERSION" >&2
+          exit 1
+        fi
+        VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
         IMAGE_TAG="${VERSION}-test"
+        GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:pg17-${VERSION}"
+        echo "documentdb_version=$VERSION" >> $GITHUB_OUTPUT
+        echo "documentdb_version_dash=$VERSION_DASH" >> $GITHUB_OUTPUT
         echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "Image tag: $IMAGE_TAG"
+        echo "gateway_source_image=$GATEWAY_SOURCE_IMAGE" >> $GITHUB_OUTPUT
+        echo "DocumentDB version: $VERSION"
+        echo "Release tag: v$VERSION_DASH"
+        echo "Gateway source image: $GATEWAY_SOURCE_IMAGE"
 
-    - name: Build extension deb (PG18)
-      run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
+    - name: Verify public extension release assets
+      env:
+        VERSION_DASH: ${{ steps.version.outputs.documentdb_version_dash }}
+      run: |
+        set -euo pipefail
+        for ARCH in amd64 arm64; do
+          ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${VERSION_DASH}/deb13-postgresql-18-documentdb_${VERSION_DASH}_${ARCH}.deb"
+          echo "Checking $ASSET_URL"
+          curl -fsI -L "$ASSET_URL" >/dev/null
+        done
 
-    - name: Build gateway deb
-      # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
-      # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
-      run: ./packaging/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
-
-    - name: Upload packages
-      uses: actions/upload-artifact@v4
-      with:
-        name: documentdb-packages-${{ matrix.arch }}
-        path: packages/*.deb
-        retention-days: 1
-        if-no-files-found: error
-        compression-level: 0
-
-    - name: Upload gateway runtime files
-      if: matrix.arch == 'amd64'
-      uses: actions/upload-artifact@v4
-      with:
-        name: gateway-runtime-files
-        path: |
-          scripts/utils.sh
-          pg_documentdb_gw/SetupConfiguration.json
-        retention-days: 1
-        if-no-files-found: error
+    - name: Verify public gateway source image
+      env:
+        SOURCE_IMAGE: ${{ steps.version.outputs.gateway_source_image }}
+      run: |
+        set -euo pipefail
+        docker manifest inspect "$SOURCE_IMAGE" >/dev/null
 
   # ---------------------------------------------------------------------------
   # Build and push documentdb + gateway images (per-arch)
   # ---------------------------------------------------------------------------
   build-and-push:
     name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
-    needs: [build-packages]
+    needs: [resolve-public-artifacts]
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -114,7 +96,7 @@ jobs:
           - name: documentdb
             dockerfile: .github/dockerfiles/Dockerfile_extension
           - name: gateway
-            dockerfile: .github/dockerfiles/Dockerfile_gateway_deb
+            dockerfile: .github/dockerfiles/Dockerfile_gateway_public_image
         include:
           - arch: amd64
             runner: ubuntu-22.04
@@ -122,34 +104,20 @@ jobs:
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
     env:
-      IMAGE_TAG: ${{ needs.build-packages.outputs.image_tag }}
+      IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Download packages
-      uses: actions/download-artifact@v4
-      with:
-        name: documentdb-packages-${{ matrix.arch }}
-        path: packages/
-
-    - name: Download gateway runtime files
-      if: matrix.image.name == 'gateway'
-      uses: actions/download-artifact@v4
-      with:
-        name: gateway-runtime-files
-        path: gateway-runtime/
-
-    - name: Prepare gateway build context
-      if: matrix.image.name == 'gateway'
+    - name: Download public extension package
+      if: matrix.image.name == 'documentdb'
       run: |
-        set -e
-        mkdir -p gateway-context/packages gateway-context/scripts gateway-context/pg_documentdb_gw
-        cp packages/*gateway*.deb gateway-context/packages/
-        cp gateway-runtime/scripts/utils.sh gateway-context/scripts/
-        cp gateway-runtime/pg_documentdb_gw/SetupConfiguration.json gateway-context/pg_documentdb_gw/
-        cp ${{ github.workspace }}/.github/dockerfiles/gateway_entrypoint.sh gateway-context/scripts/
-        ls gateway-context/packages/*.deb || { echo "ERROR: Gateway deb not found"; exit 1; }
+        set -euo pipefail
+        mkdir -p packages
+        DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
+        ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/${DEB_FILE}"
+        curl -fsSL -o "packages/${DEB_FILE}" -L "$ASSET_URL"
+        ls -lh packages/
 
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -161,35 +129,22 @@ jobs:
         IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
 
         BUILD_ARGS=""
-        BUILD_CONTEXT="."
 
         case "${{ matrix.image.name }}" in
           documentdb)
-            DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
-            if [[ -z "$DEB_FILE" ]]; then
-              echo "ERROR: No DocumentDB extension .deb found in packages/" >&2
-              ls -la packages/ >&2
-              exit 1
-            fi
+            DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
             echo "Using deb: $DEB_FILE"
             BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
             ;;
           gateway)
-            GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
-            if [[ -z "$GW_DEB" ]]; then
-              echo "ERROR: No gateway .deb found in gateway-context/packages/" >&2
-              ls -la gateway-context/packages/ >&2
-              exit 1
-            fi
-            echo "Using deb: $GW_DEB"
-            BUILD_ARGS="--build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB"
-            BUILD_CONTEXT="gateway-context"
+            echo "Using public gateway source image: ${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
+            BUILD_ARGS="--build-arg SOURCE_IMAGE=${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
             ;;
         esac
 
-        docker build $BUILD_ARGS \
+        docker build --pull $BUILD_ARGS \
           -t $IMAGE \
-          -f ${{ matrix.image.dockerfile }} $BUILD_CONTEXT
+          -f ${{ matrix.image.dockerfile }} .
         docker push $IMAGE
 
   # ---------------------------------------------------------------------------
@@ -201,9 +156,9 @@ jobs:
       matrix:
         image: [documentdb, gateway]
     runs-on: ubuntu-22.04
-    needs: [build-packages, build-and-push]
+    needs: [resolve-public-artifacts, build-and-push]
     env:
-      IMAGE_TAG: ${{ needs.build-packages.outputs.image_tag }}
+      IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
     steps:
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -240,18 +195,19 @@ jobs:
   summary:
     name: Build Summary
     runs-on: ubuntu-22.04
-    needs: [build-packages, create-manifest]
+    needs: [resolve-public-artifacts, create-manifest]
     if: always()
     steps:
     - name: Summary
       run: |
         echo "## DocumentDB Image Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **DocumentDB Version**: \`${{ needs.build-packages.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Image Tag**: \`${{ needs.build-packages.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Source Ref**: \`${{ env.DOCUMENTDB_REPO_REF }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **DocumentDB Version**: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image Tag**: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Extension Package Source**: \`https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_{amd64,arm64}.deb\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Gateway Source Image**: \`${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Images**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "To release these images, run \`release_documentdb_images.yml\` with:" >> $GITHUB_STEP_SUMMARY
-        echo "- candidate_version: \`${{ needs.build-packages.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- version: \`${{ needs.build-packages.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- candidate_version: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- version: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
