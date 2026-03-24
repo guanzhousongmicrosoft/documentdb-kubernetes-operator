@@ -1,0 +1,257 @@
+name: RELEASE - Build DocumentDB Candidate Images
+
+# Builds documentdb extension and gateway images from upstream documentdb/documentdb .deb packages.
+# These images follow the DATABASE version track (documentDbVersion in values.yaml).
+# For operator/sidecar images, see build_operator_images.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      documentdb_ref:
+        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages'
+        required: false
+        default: 'main'
+      version:
+        description: 'Image version tag override (auto-detected from source if empty)'
+        required: false
+        default: ''
+
+  repository_dispatch:
+    types: [documentdb-release]
+
+permissions:
+  packages: write
+  contents: read
+  id-token: write
+
+env:
+  DOCUMENTDB_REPO: documentdb/documentdb
+  DOCUMENTDB_REPO_REF: ${{ github.event.inputs.documentdb_ref || github.event.client_payload.ref || 'main' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build DocumentDB extension and gateway deb packages (per-arch)
+  # ---------------------------------------------------------------------------
+  build-packages:
+    name: Build Packages (${{ matrix.arch }})
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    outputs:
+      documentdb_version: ${{ steps.version.outputs.documentdb_version }}
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+    - name: Checkout documentdb source
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.DOCUMENTDB_REPO }}
+        ref: ${{ env.DOCUMENTDB_REPO_REF }}
+
+    - name: Extract version from source
+      id: version
+      run: |
+        DOCDB_VERSION=$(grep -E "^default_version" pg_documentdb_core/documentdb_core.control \
+          | sed -E "s/.*'([0-9]+\.[0-9]+-[0-9]+)'.*/\1/" | sed "s/-/./g")
+        echo "documentdb_version=$DOCDB_VERSION" >> $GITHUB_OUTPUT
+        echo "DocumentDB version: $DOCDB_VERSION"
+
+    - name: Determine image tag
+      id: tag
+      run: |
+        # Use explicit version input if provided, otherwise auto-detect from source
+        VERSION="${{ github.event.inputs.version || github.event.client_payload.version }}"
+        if [[ -z "$VERSION" ]]; then
+          VERSION="${{ steps.version.outputs.documentdb_version }}"
+        fi
+        IMAGE_TAG="${VERSION}-test"
+        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "Image tag: $IMAGE_TAG"
+
+    - name: Build extension deb (PG18)
+      run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
+
+    - name: Build gateway deb
+      # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
+      # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
+      run: ./packaging/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+
+    - name: Upload packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentdb-packages-${{ matrix.arch }}
+        path: packages/*.deb
+        retention-days: 1
+        if-no-files-found: error
+        compression-level: 0
+
+    - name: Upload gateway runtime files
+      if: matrix.arch == 'amd64'
+      uses: actions/upload-artifact@v4
+      with:
+        name: gateway-runtime-files
+        path: |
+          scripts/utils.sh
+          pg_documentdb_gw/SetupConfiguration.json
+        retention-days: 1
+        if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Build and push documentdb + gateway images (per-arch)
+  # ---------------------------------------------------------------------------
+  build-and-push:
+    name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+    needs: [build-packages]
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        image:
+          - name: documentdb
+            dockerfile: .github/dockerfiles/Dockerfile_extension
+          - name: gateway
+            dockerfile: .github/dockerfiles/Dockerfile_gateway_deb
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      IMAGE_TAG: ${{ needs.build-packages.outputs.image_tag }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download packages
+      uses: actions/download-artifact@v4
+      with:
+        name: documentdb-packages-${{ matrix.arch }}
+        path: packages/
+
+    - name: Download gateway runtime files
+      if: matrix.image.name == 'gateway'
+      uses: actions/download-artifact@v4
+      with:
+        name: gateway-runtime-files
+        path: gateway-runtime/
+
+    - name: Prepare gateway build context
+      if: matrix.image.name == 'gateway'
+      run: |
+        set -e
+        mkdir -p gateway-context/packages gateway-context/scripts gateway-context/pg_documentdb_gw
+        cp packages/*gateway*.deb gateway-context/packages/
+        cp gateway-runtime/scripts/utils.sh gateway-context/scripts/
+        cp gateway-runtime/pg_documentdb_gw/SetupConfiguration.json gateway-context/pg_documentdb_gw/
+        cp ${{ github.workspace }}/.github/dockerfiles/gateway_entrypoint.sh gateway-context/scripts/
+        ls gateway-context/packages/*.deb || { echo "ERROR: Gateway deb not found"; exit 1; }
+
+    - name: Login to GHCR
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+      run: |
+        set -euo pipefail
+        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+        IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
+
+        BUILD_ARGS=""
+        BUILD_CONTEXT="."
+
+        case "${{ matrix.image.name }}" in
+          documentdb)
+            DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+            if [[ -z "$DEB_FILE" ]]; then
+              echo "ERROR: No DocumentDB extension .deb found in packages/" >&2
+              ls -la packages/ >&2
+              exit 1
+            fi
+            echo "Using deb: $DEB_FILE"
+            BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
+            ;;
+          gateway)
+            GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
+            if [[ -z "$GW_DEB" ]]; then
+              echo "ERROR: No gateway .deb found in gateway-context/packages/" >&2
+              ls -la gateway-context/packages/ >&2
+              exit 1
+            fi
+            echo "Using deb: $GW_DEB"
+            BUILD_ARGS="--build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB"
+            BUILD_CONTEXT="gateway-context"
+            ;;
+        esac
+
+        docker build $BUILD_ARGS \
+          -t $IMAGE \
+          -f ${{ matrix.image.dockerfile }} $BUILD_CONTEXT
+        docker push $IMAGE
+
+  # ---------------------------------------------------------------------------
+  # Create multi-arch manifests, sign, and verify
+  # ---------------------------------------------------------------------------
+  create-manifest:
+    name: Create, Push, Sign & Verify Manifest (${{ matrix.image }})
+    strategy:
+      matrix:
+        image: [documentdb, gateway]
+    runs-on: ubuntu-22.04
+    needs: [build-packages, build-and-push]
+    env:
+      IMAGE_TAG: ${{ needs.build-packages.outputs.image_tag }}
+    steps:
+    - name: Login to GHCR
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Create and Push Manifest
+      run: |
+        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
+          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
+        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@main
+
+    - name: Sign manifest (keyless)
+      run: |
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+          | awk '/^Digest:/ { print $2 }')
+        echo "Signing manifest-list@${DIGEST}"
+        cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
+
+    - name: Verify manifest signature (keyless)
+      run: |
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+          | awk '/^Digest:/ { print $2 }')
+        cosign verify \
+          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
+
+  # ---------------------------------------------------------------------------
+  # Summary
+  # ---------------------------------------------------------------------------
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-22.04
+    needs: [build-packages, create-manifest]
+    if: always()
+    steps:
+    - name: Summary
+      run: |
+        echo "## DocumentDB Image Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **DocumentDB Version**: \`${{ needs.build-packages.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image Tag**: \`${{ needs.build-packages.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Source Ref**: \`${{ env.DOCUMENTDB_REPO_REF }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Images**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To release these images, run \`release_documentdb_images.yml\` with:" >> $GITHUB_STEP_SUMMARY
+        echo "- candidate_version: \`${{ needs.build-packages.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- version: \`${{ needs.build-packages.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY

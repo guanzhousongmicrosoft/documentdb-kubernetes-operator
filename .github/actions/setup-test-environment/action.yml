@@ -62,6 +62,10 @@ inputs:
     description: 'Optional gateway image override for the cluster'
     required: false
     default: ''
+  documentdb-image-tag:
+    description: 'Tag for documentdb/gateway images (defaults to image-tag if not set, for backward compat)'
+    required: false
+    default: ''
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -225,24 +229,28 @@ runs:
       run: |
         # Resolve early so kind-load and deploy steps both use the same refs.
         # Priority: explicit input override > external manifest tag > local build tag.
+        # Database images may use a different tag than operator images (decoupled versioning).
+        DOCDB_TAG="${{ inputs.documentdb-image-tag || inputs.image-tag }}"
+
         if [[ -n "${{ inputs.documentdb-image }}" ]]; then
           DOCDB_IMAGE="${{ inputs.documentdb-image }}"
         elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
-          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}"
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}"
         else
-          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}-${{ inputs.architecture }}"
         fi
 
         if [[ -n "${{ inputs.gateway-image }}" ]]; then
           GW_IMAGE="${{ inputs.gateway-image }}"
         elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
-          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}"
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}"
         else
-          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}-${{ inputs.architecture }}"
         fi
 
         echo "DOCUMENTDB_IMAGE_RESOLVED=$DOCDB_IMAGE" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE_RESOLVED=$GW_IMAGE" >> $GITHUB_ENV
+        echo "DOCDB_IMAGE_TAG=${DOCDB_TAG}" >> $GITHUB_ENV
         echo "Resolved DocumentDB image: $DOCDB_IMAGE"
         echo "Resolved Gateway image: $GW_IMAGE"
 
@@ -462,30 +470,25 @@ runs:
           fi
           
           # Install the operator using the platform-specific local chart with image tag overrides
-          if [[ "$CERT_MANAGER_READY" == "true" ]]; then
-            helm install documentdb-operator ./documentdb-chart \
-              --namespace ${{ inputs.operator-namespace }} \
-              --create-namespace \
-              --set documentDbVersion="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
-              --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
-              --set image.sidecarinjector.pullPolicy=IfNotPresent \
-              --set image.walreplica.pullPolicy=IfNotPresent \
-              --wait --timeout=15m
-          else
-            helm install documentdb-operator ./documentdb-chart \
-              --namespace ${{ inputs.operator-namespace }} \
-              --create-namespace \
-              --set documentDbVersion="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
-              --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
-              --set image.sidecarinjector.pullPolicy=IfNotPresent \
-              --set image.walreplica.pullPolicy=IfNotPresent \
-              --values /tmp/values-override.yaml \
-              --wait --timeout=15m
+          # Operator/sidecar use the operator track tag (LOCAL_IMAGE_TAG).
+          # Database images (documentdb/gateway) use DOCDB_IMAGE_TAG (may differ from operator tag).
+          HELM_ARGS=(
+            --namespace ${{ inputs.operator-namespace }}
+            --create-namespace
+            --set documentDbVersion="$LOCAL_IMAGE_TAG"
+            --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG"
+            --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG"
+            --set image.documentdbk8soperator.pullPolicy=IfNotPresent
+            --set image.sidecarinjector.pullPolicy=IfNotPresent
+            --set image.walreplica.pullPolicy=IfNotPresent
+            --wait --timeout=15m
+          )
+
+          if [[ "$CERT_MANAGER_READY" != "true" ]]; then
+            HELM_ARGS+=(--values /tmp/values-override.yaml)
           fi
+
+          helm install documentdb-operator ./documentdb-chart "${HELM_ARGS[@]}"
         else
           echo "❌ Platform-specific Helm chart artifact not found: $EXPECTED_CHART_FILE"
           echo "Available files in chart artifact directory:"
