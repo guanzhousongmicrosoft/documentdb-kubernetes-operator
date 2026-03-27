@@ -16,16 +16,16 @@ channels:
 images:
   operator:
     ref: ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.2.0
-    digest: ""
+    digest: "sha256:655729d47aaec8ce2d33335ffdd522aacefd1a8d6f5476c6ddf26a923efba16f"
   sidecar:
     ref: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0.2.0
-    digest: ""
+    digest: "sha256:357ecacabd8371e0e8fc936dc7e3660618e5030c971f982d6b946fcf6e155368"
   documentdb:
     ref: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0
-    digest: ""
+    digest: "sha256:5de0ddb54c6423b226cef7b2bf5ffe1db0369640a854ddb57b56c21fbfe863db"
   gateway:
     ref: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0
-    digest: ""
+    digest: "sha256:039691edfbe5212fb855067809a8b946a16fa317873d6fb485289291620f53ed"
 
 postgres:
   ref: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
