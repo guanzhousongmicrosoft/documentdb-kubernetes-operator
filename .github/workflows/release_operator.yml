@@ -241,7 +241,7 @@ jobs:
       version: ${{ inputs.version }}
       release_ref: ${{ inputs.source_ref }}
       publish_branch: gh-pages
-      repo_url: https://documentdb.github.io/documentdb-kubernetes-operator
+      repo_url: ${{ format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
       dry_run: false
       confirm_version: ${{ inputs.version }}
       normalize_chart_metadata: true
