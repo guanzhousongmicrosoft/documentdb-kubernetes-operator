@@ -41,10 +41,12 @@ func parseExtensionVersions(output string) (defaultVersion, installedVersion str
 
 var _ = Describe("DocumentDB Controller", func() {
 	const (
-		clusterName         = "test-cluster"
-		clusterNamespace    = "default"
-		documentDBName      = "test-documentdb"
-		documentDBNamespace = "default"
+		clusterName            = "test-cluster"
+		clusterNamespace       = "default"
+		documentDBName         = "test-documentdb"
+		documentDBNamespace    = "default"
+		defaultDocumentDBImage = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0"
+		defaultGatewayImage    = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0"
 	)
 
 	var (
@@ -60,6 +62,9 @@ var _ = Describe("DocumentDB Controller", func() {
 		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		GinkgoT().Setenv(util.DEFAULT_DOCUMENTDB_IMAGE_ENV, defaultDocumentDBImage)
+		GinkgoT().Setenv(util.DEFAULT_GATEWAY_IMAGE_ENV, defaultGatewayImage)
+		GinkgoT().Setenv(util.DOCUMENTDB_VERSION_ENV, "")
 	})
 
 	Describe("buildImagePatchOps", func() {
@@ -3502,7 +3507,7 @@ var _ = Describe("DocumentDB Controller", func() {
 							{
 								Name: "documentdb",
 								ImageVolumeSource: corev1.ImageVolumeSource{
-									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+									Reference: defaultDocumentDBImage,
 								},
 							},
 						},
@@ -3511,7 +3516,7 @@ var _ = Describe("DocumentDB Controller", func() {
 						{
 							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
 							Parameters: map[string]string{
-								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"gatewayImage":               defaultGatewayImage,
 								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
 							},
 						},
@@ -3600,7 +3605,7 @@ var _ = Describe("DocumentDB Controller", func() {
 							{
 								Name: "documentdb",
 								ImageVolumeSource: corev1.ImageVolumeSource{
-									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+									Reference: defaultDocumentDBImage,
 								},
 							},
 						},
@@ -3609,7 +3614,7 @@ var _ = Describe("DocumentDB Controller", func() {
 						{
 							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
 							Parameters: map[string]string{
-								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"gatewayImage":               defaultGatewayImage,
 								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
 								"gatewayTLSSecret":           "old-tls-secret",
 							},

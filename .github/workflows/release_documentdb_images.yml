@@ -2,7 +2,7 @@ name: RELEASE - Promote DocumentDB Images
 
 # Promotes documentdb extension and gateway candidate images to release tags,
 # then creates a PR to update default versions across the codebase.
-# This workflow handles only the DATABASE version track (documentDbVersion).
+# This workflow handles only the DATABASE version track recorded in release/artifacts.yaml.
 # For operator/sidecar releases, see release_operator.yml.
 
 on:
@@ -14,6 +14,23 @@ on:
       version:
         description: 'Database image release version (e.g., 0.111.0)'
         required: true
+        default: '0.109.0'
+      update_defaults:
+        description: 'Create PR to update default image versions in code'
+        required: false
+        default: true
+        type: boolean
+
+  workflow_call:
+    inputs:
+      candidate_version:
+        description: 'Database candidate tag to promote (e.g., 0.111.0-build-123456789-1-deadbee)'
+        required: true
+        type: string
+      version:
+        description: 'Database image release version (e.g., 0.111.0)'
+        required: false
+        type: string
         default: '0.109.0'
       update_defaults:
         description: 'Create PR to update default image versions in code'
@@ -72,77 +89,55 @@ jobs:
       - name: Detect current default version
         id: current
         run: |
-          # Extract the assigned DEFAULT_DOCUMENTDB_IMAGE value from constants.go.
-          CURRENT=$(sed -nE 's|^[[:space:]]*DEFAULT_DOCUMENTDB_IMAGE[[:space:]]*=.*:([0-9]+\.[0-9]+\.[0-9]+)".*|\1|p' \
-            operator/src/internal/utils/constants.go | head -1)
+          CURRENT=$(sed -nE 's|^[[:space:]]*databaseTrack:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$|\1|p' \
+            release/artifacts.yaml | head -1)
           if [[ -z "$CURRENT" ]]; then
-            echo "Failed to extract current default version from operator/src/internal/utils/constants.go" >&2
+            echo "Failed to extract current default version from release/artifacts.yaml" >&2
             exit 1
           fi
           echo "current_version=$CURRENT" >> $GITHUB_OUTPUT
           echo "Current default version: $CURRENT"
 
-      - name: Update version references
-        env:
-          OLD_VERSION: ${{ steps.current.outputs.current_version }}
-          NEW_VERSION: ${{ inputs.version }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/src/go.mod
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Resolve promoted image digests
+        id: release_digests
+        run: |
+          set -euo pipefail
+          DOCUMENTDB_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/documentdb:${{ inputs.version }} | awk '/^Digest:/ { print $2 }')
+          GATEWAY_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/gateway:${{ inputs.version }} | awk '/^Digest:/ { print $2 }')
+          echo "documentdb_digest=$DOCUMENTDB_DIGEST" >> $GITHUB_OUTPUT
+          echo "gateway_digest=$GATEWAY_DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Sync version references from canonical manifest
         run: |
           set -euo pipefail
 
-          if [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
-            echo "Version $NEW_VERSION is already the default. No changes needed."
-            exit 0
+          cd operator/src
+          go run ./cmd/release-manifest sync \
+            --manifest ../../release/artifacts.yaml \
+            --repo-root ../.. \
+            --database-track "${{ inputs.version }}" \
+            --documentdb-digest "${{ steps.release_digests.outputs.documentdb_digest }}" \
+            --gateway-digest "${{ steps.release_digests.outputs.gateway_digest }}"
+
+      - name: Check for metadata changes
+        id: metadata_changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
-          echo "Updating default versions: $OLD_VERSION → $NEW_VERSION"
-
-          # 1. Update operator constants.go
-          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
-            operator/src/internal/utils/constants.go
-
-          # 2. Update sidecar plugin config.go
-          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
-            operator/cnpg-plugins/sidecar-injector/internal/config/config.go
-
-          # 3. Update Helm chart values.yaml
-          sed -i "s|documentDbVersion: \"${OLD_VERSION}\"|documentDbVersion: \"${NEW_VERSION}\"|" \
-            operator/documentdb-helm-chart/values.yaml
-
-          # 4. Update test workflow fallback images
-          sed -i "s|documentdb:${OLD_VERSION}|documentdb:${NEW_VERSION}|g" \
-            .github/workflows/test-backup-and-restore.yml
-          sed -i "s|gateway:${OLD_VERSION}|gateway:${NEW_VERSION}|g" \
-            .github/workflows/test-backup-and-restore.yml
-
-          # 5. Update the released database baseline used by upgrade tests
-          sed -i "s|RELEASED_DATABASE_VERSION: ${OLD_VERSION}|RELEASED_DATABASE_VERSION: ${NEW_VERSION}|" \
-            .github/workflows/test-upgrade-and-rollback.yml
-
-          # 6. Update sidecar plugin config test (hardcoded expected gateway image)
-          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
-            operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go
-
-          # 7. Update build workflow defaults
-          sed -i "s|DEFAULT_DOCUMENTDB_VERSION: '${OLD_VERSION}'|DEFAULT_DOCUMENTDB_VERSION: '${NEW_VERSION}'|" \
-            .github/workflows/build_documentdb_images.yml
-          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
-            .github/workflows/build_documentdb_images.yml
-
-          # 8. Update release workflow default version
-          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
-            .github/workflows/release_documentdb_images.yml
-
-          # 9. Update gateway Dockerfile default source image ARG
-          sed -i "s|pg17-${OLD_VERSION}|pg17-${NEW_VERSION}|" \
-            .github/dockerfiles/Dockerfile_gateway_public_image
-
-          echo "=== Files modified ==="
-          git diff --name-only
-          echo ""
-          echo "=== Diff ==="
-          git diff
-
       - name: Create Pull Request
+        if: ${{ steps.metadata_changes.outputs.has_changes == 'true' }}
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -154,12 +149,10 @@ jobs:
             Promoted images `documentdb` and `gateway` from candidate `${{ inputs.candidate_version }}` to release `${{ inputs.version }}`.
 
             ### Changes
-            - Updated `DEFAULT_DOCUMENTDB_IMAGE` and `DEFAULT_GATEWAY_IMAGE` in `constants.go`
-            - Updated sidecar plugin default gateway image in `config.go` and `config_test.go`
-            - Updated `documentDbVersion` in Helm chart `values.yaml`
-            - Updated fallback images in `test-backup-and-restore.yml`
-            - Updated build/release workflow defaults in `build_documentdb_images.yml` and `release_documentdb_images.yml`
-            - Updated gateway Dockerfile default source image in `Dockerfile_gateway_public_image`
+            - Updated `release/artifacts.yaml`
+            - Synced Helm chart defaults from the canonical manifest
+            - Synced workflow defaults and upgrade baselines from the canonical manifest
+            - Updated the public gateway Dockerfile source image default
 
             ### Image References
             - `ghcr.io/${{ github.repository }}/documentdb:${{ inputs.version }}`
@@ -181,8 +174,8 @@ jobs:
           echo "- **Images Promoted**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
           echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ steps.current.outputs.current_version }}" != "${{ inputs.version }}" ]]; then
-            echo "- **PR Created**: Updates default versions from \`${{ steps.current.outputs.current_version }}\` to \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.metadata_changes.outputs.has_changes }}" == "true" ]]; then
+            echo "- **PR Created**: Updates release metadata from \`${{ steps.current.outputs.current_version }}\` toward \`${{ inputs.version }}\`, including digest metadata" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- **No PR needed**: Version \`${{ inputs.version }}\` is already the default" >> $GITHUB_STEP_SUMMARY
+            echo "- **No PR needed**: Canonical release metadata already matches the promoted images" >> $GITHUB_STEP_SUMMARY
           fi

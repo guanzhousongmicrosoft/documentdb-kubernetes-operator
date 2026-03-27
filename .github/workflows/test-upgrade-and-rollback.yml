@@ -106,11 +106,11 @@ jobs:
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
         else
-          # External images: read documentDbVersion from values.yaml (separate version track from operator).
-          DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
-          echo "Using documentDbVersion from values.yaml: $DOCDB_TAG"
-          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}"
-          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}"
+          # External images: read the explicit runtime default refs from values.yaml.
+          mapfile -t IMAGE_REFS < <(ruby -e 'require "yaml"; values = YAML.load_file("operator/documentdb-helm-chart/values.yaml"); %w[documentdb gateway].each do |name| artifact = values.dig("runtimeDefaults", name) || {}; ref = artifact["ref"].to_s; digest = artifact["digest"].to_s; puts(digest.empty? ? ref : "#{ref}@#{digest}"); end')
+          NEW_DOCDB="${IMAGE_REFS[0]}"
+          NEW_GW="${IMAGE_REFS[1]}"
+          echo "Using explicit runtime default refs from values.yaml"
         fi
         echo "DOCUMENTDB_IMAGE=$NEW_DOCDB" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE=$NEW_GW" >> $GITHUB_ENV
@@ -306,7 +306,10 @@ jobs:
         
         helm upgrade documentdb-operator ./documentdb-chart \
           --namespace $OPERATOR_NS \
-          --set documentDbVersion="$LOCAL_IMAGE_TAG" \
+          --set runtimeDefaults.documentdb.ref="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${LOCAL_IMAGE_TAG}" \
+          --set runtimeDefaults.documentdb.digest="" \
+          --set runtimeDefaults.gateway.ref="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${LOCAL_IMAGE_TAG}" \
+          --set runtimeDefaults.gateway.digest="" \
           --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
           --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
           --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \

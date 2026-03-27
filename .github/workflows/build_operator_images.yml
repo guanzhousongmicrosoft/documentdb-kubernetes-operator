@@ -11,6 +11,15 @@ on:
         description: 'Operator version for the build (will be tagged as {version}-test)'
         required: false
         default: '0.2.0'
+        type: string
+
+  workflow_call:
+    inputs:
+      version:
+        description: 'Operator version for the build (will be tagged as {version}-test)'
+        required: false
+        default: '0.2.0'
+        type: string
 
   push:
     branches:
@@ -26,8 +35,8 @@ permissions:
   id-token: write
 
 env:
-  VERSION: ${{ github.event.inputs.version || '0.2.0' }}
-  IMAGE_TAG: ${{ github.event.inputs.version || '0.2.0' }}-test
+  VERSION: ${{ inputs.version || '0.2.0' }}
+  IMAGE_TAG: ${{ inputs.version || '0.2.0' }}-test
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -57,22 +66,22 @@ jobs:
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-    - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
-      run: |
-        set -euo pipefail
-        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
-        IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
+      - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+        run: |
+          set -euo pipefail
+          TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+          IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
 
-        docker build --build-arg ARCH=${{ matrix.base_arch }} \
-          -t $IMAGE \
-          -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
-        docker push $IMAGE
+          docker build --build-arg ARCH=${{ matrix.base_arch }} \
+            -t $IMAGE \
+            -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
+          docker push $IMAGE
 
   # ---------------------------------------------------------------------------
   # Create multi-arch manifests, sign, and verify
@@ -85,31 +94,86 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [build-and-push]
     steps:
-    - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-    - name: Create and Push Manifest
-      run: |
-        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
-        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+      - name: Create and Push Manifest
+        run: |
+          docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+            --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
+            --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
+          docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
 
-    - name: Install cosign
-      uses: sigstore/cosign-installer@v3.8.2
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.2
 
-    - name: Sign manifest (keyless)
-      run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          | awk '/^Digest:/ { print $2 }')
-        echo "Signing manifest-list@${DIGEST}"
-        cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
+      - name: Sign manifest (keyless)
+        run: |
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+            | awk '/^Digest:/ { print $2 }')
+          echo "Signing manifest-list@${DIGEST}"
+          cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
 
-    - name: Verify manifest signature (keyless)
-      run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          | awk '/^Digest:/ { print $2 }')
-        cosign verify \
-          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_operator_images.yml@${{ github.ref }}" \
-          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-          ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
+      - name: Verify manifest signature (keyless)
+        run: |
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+            | awk '/^Digest:/ { print $2 }')
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_operator_images.yml@${{ github.ref }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
+
+  # ---------------------------------------------------------------------------
+  # Machine-readable summary bundle
+  # ---------------------------------------------------------------------------
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-22.04
+    needs: [create-manifest]
+    if: ${{ always() && needs.create-manifest.result == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/src/go.mod
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Generate candidate bundle
+        run: |
+          OPERATOR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/operator:${{ env.IMAGE_TAG }} \
+            | awk '/^Digest:/ { print $2 }')
+          SIDECAR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/sidecar:${{ env.IMAGE_TAG }} \
+            | awk '/^Digest:/ { print $2 }')
+          cd operator/src
+          go run ./cmd/release-manifest bundle \
+            --manifest ../../release/artifacts.yaml \
+            --scope operator \
+            --source-ref "${{ github.sha }}" \
+            --candidate-operator-ref "ghcr.io/${{ github.repository }}/operator:${{ env.IMAGE_TAG }}" \
+            --candidate-operator-digest "$OPERATOR_DIGEST" \
+            --candidate-sidecar-ref "ghcr.io/${{ github.repository }}/sidecar:${{ env.IMAGE_TAG }}" \
+            --candidate-sidecar-digest "$SIDECAR_DIGEST" \
+            --output ../../operator-candidate-bundle.json
+
+      - name: Upload candidate bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-candidate-bundle
+          path: operator-candidate-bundle.json
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          echo "## Operator Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Operator Track**: \`${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Candidate Image Tag**: \`${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images**: operator, sidecar" >> $GITHUB_STEP_SUMMARY
+          echo "- **Candidate Bundle Artifact**: \`operator-candidate-bundle\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To release these images, run \`release.yml\` with scope=\`operator\` (preferred) or \`release_operator.yml\` directly." >> $GITHUB_STEP_SUMMARY

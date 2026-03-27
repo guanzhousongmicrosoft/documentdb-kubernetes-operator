@@ -70,6 +70,12 @@ func FromParameters(
 	}
 
 	configuration.applyDefaults()
+	if configuration.GatewayImage == "" {
+		validationErrors = append(
+			validationErrors,
+			validation.BuildErrorForParameter(helper, gatewayImageParameter, "gatewayImage parameter is required"),
+		)
+	}
 
 	return configuration, validationErrors
 }
@@ -104,11 +110,7 @@ func (config *Configuration) applyDefaults() {
 			"plugin-metadata": "default",
 		}
 	}
-	// Set defaults
-	if config.GatewayImage == "" {
-		// NOTE: Keep in sync with operator/src/internal/utils/constants.go:DEFAULT_GATEWAY_IMAGE
-		config.GatewayImage = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0"
-	}
+	// Set defaults for optional fields.
 	if config.GatewayImagePullPolicy == "" {
 		config.GatewayImagePullPolicy = corev1.PullIfNotPresent
 	}

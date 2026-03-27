@@ -33,6 +33,14 @@ bld/
 [Ll]ogs/
 documentdb-operator-*.tgz
 
+# Repository-owned release metadata and validation code (not build output)
+!release/
+!release/artifacts.yaml
+!release/artifacts.schema.json
+!operator/src/internal/release/
+!operator/src/internal/release/artifacts.go
+!operator/src/internal/release/artifacts_test.go
+
 # Visual Studio 2015/2017 cache/options directory
 .vs/
 # Uncomment if you have tasks that create the project's static files in wwwroot

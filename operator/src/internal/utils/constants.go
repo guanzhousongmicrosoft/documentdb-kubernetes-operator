@@ -8,6 +8,10 @@ const (
 	SIDECAR_PORT  = "SIDECAR_PORT"
 	GATEWAY_PORT  = "GATEWAY_PORT"
 
+	// Explicit default runtime image environment variables injected by the Helm chart.
+	DEFAULT_DOCUMENTDB_IMAGE_ENV = "DEFAULT_DOCUMENTDB_IMAGE"
+	DEFAULT_GATEWAY_IMAGE_ENV    = "DEFAULT_GATEWAY_IMAGE"
+
 	// DocumentDB versioning environment variable
 	DOCUMENTDB_VERSION_ENV = "DOCUMENTDB_VERSION"
 
@@ -25,10 +29,6 @@ const (
 	// The operator requires K8s 1.35+ for ImageVolume GA support.
 	MinK8sMinorVersion = 35
 
-	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
-	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.109.0"
-	// NOTE: Keep in sync with operator/cnpg-plugins/sidecar-injector/internal/config/config.go:applyDefaults()
-	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.109.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
 	// TODO: remove these constants once change stream support is included in the official images.

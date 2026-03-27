@@ -30,6 +30,37 @@ All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/
 
 ---
 
+## Canonical Release Manifest
+
+The repository now includes `release/artifacts.yaml` as the **canonical artifact manifest** for:
+
+- chart name, version, and appVersion
+- active runtime images: `operator`, `sidecar`, `documentdb`, and `gateway`
+- track versions for the operator and database release streams
+- the default PostgreSQL base image consumed by the operator
+
+The manifest shape is described by `release/artifacts.schema.json`.
+
+### Ownership and Update Policy
+
+- Any pull request that changes released chart metadata or default runtime image references should update `release/artifacts.yaml` in the same change.
+- During this first migration phase, runtime and workflow consumers still read legacy sources such as `Chart.yaml`, `values.yaml`, operator constants, and sidecar defaults.
+- CI validation in `operator/src/internal/release/artifacts_test.go` keeps the manifest synchronized with those legacy sources until later phases migrate them to consume the manifest directly.
+
+### Digest Strategy
+
+- The manifest stores a required `ref` field using `repository:tag`.
+- A separate optional `digest` field records the promoted manifest digest for each released image.
+- Helm image rendering prefers `ref@digest` when a digest is present, so release packaging can deploy immutable image identities while keeping readable tags in metadata.
+
+### Rollback Guidance
+
+- Treat each merged release-metadata PR as a rollback anchor.
+- To reconstruct a prior release, use the corresponding historical snapshot of `release/artifacts.yaml` plus the synced chart defaults in that PR.
+- Once digest fields are populated, the manifest snapshot is sufficient to identify the exact promoted image manifests for operator, sidecar, documentdb, and gateway.
+
+---
+
 ## Image Inventory
 
 ### Operator Track — Built from This Repository
@@ -63,11 +94,11 @@ The two version tracks are **independent** — they follow different release cad
 |--------|---------------|----------------|
 | **Images** | operator, sidecar, wal-replica | documentdb, gateway |
 | **Source repo** | This repo (Go) | `documentdb/documentdb` (C + Rust) |
-| **Version source** | `Chart.appVersion` in `Chart.yaml` | `documentDbVersion` in `values.yaml` |
-| **Current version** | `0.1.3` | `0.109.0` |
+| **Version source** | `release/artifacts.yaml` → `channels.operatorTrack` / `chart.appVersion` | `release/artifacts.yaml` → `channels.databaseTrack` |
+| **Current version** | `0.2.0` | `0.109.0` |
 | **Build workflow** | `build_operator_images.yml` | `build_documentdb_images.yml` |
-| **Release workflow** | `release_operator.yml` | `release_documentdb_images.yml` |
-| **Tag example** | `ghcr.io/.../operator:0.1.3` | `ghcr.io/.../documentdb:0.109.0` |
+| **Release workflow** | `release.yml` (preferred) or `release_operator.yml` | `release.yml` (preferred) or `release_documentdb_images.yml` |
+| **Tag example** | `ghcr.io/.../operator:0.2.0` | `ghcr.io/.../documentdb:0.109.0` |
 
 ### Why Two Tracks?
 
@@ -90,9 +121,10 @@ The operator binary determines which database images to use through a priority c
 Priority (highest → lowest):
 1. spec.documentDBImage          ← CR field: full image URI override
 2. spec.documentDBVersion        ← CR field: used as tag with hardcoded repo
-3. env DOCUMENTDB_VERSION        ← from Helm chart (documentDbVersion in values.yaml)
-4. ChangeStreams feature gate     ← temporary override for changestream images
-5. DEFAULT_DOCUMENTDB_IMAGE      ← compiled-in default (constants.go)
+3. env DEFAULT_DOCUMENTDB_IMAGE  ← explicit runtime default from Helm values
+4. env DOCUMENTDB_VERSION        ← deprecated compatibility path from Helm values
+5. ChangeStreams feature gate    ← temporary override for changestream images
+6. reconciliation error          ← operator requires explicit config if no default is available
 ```
 
 ### Gateway Image (`GetGatewayImageForDocumentDB()`)
@@ -101,14 +133,15 @@ Priority (highest → lowest):
 Priority (highest → lowest):
 1. spec.gatewayImage             ← CR field: full image URI override
 2. spec.documentDBVersion        ← CR field: used as tag with hardcoded repo
-3. env DOCUMENTDB_VERSION        ← from Helm chart (documentDbVersion in values.yaml)
-4. ChangeStreams feature gate     ← temporary override for changestream images
-5. DEFAULT_GATEWAY_IMAGE          ← compiled-in default (constants.go)
+3. env DEFAULT_GATEWAY_IMAGE     ← explicit runtime default from Helm values
+4. env DOCUMENTDB_VERSION        ← deprecated compatibility path from Helm values
+5. ChangeStreams feature gate    ← temporary override for changestream images
+6. reconciliation error          ← operator requires explicit config if no default is available
 ```
 
 ### PostgreSQL Image
 
-Set via `spec.postgresImage` in the DocumentDB CR. Defaults to `ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie` (hardcoded in the CRD schema).
+Set via `spec.postgresImage` in the DocumentDB CR. The chart now carries an explicit `runtimeDefaults.postgres.ref` value for the intended default, but the active runtime default still comes from the CRD schema (`ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie`) until a later phase removes that schema-level default.
 
 ### How Images Flow into Pods
 
@@ -140,44 +173,61 @@ The Helm chart (`operator/documentdb-helm-chart/`) coordinates deployment of ope
 ### Chart.yaml
 
 ```yaml
-version: 0.1.3           # Chart version
-appVersion: "0.1.3"       # Default tag for operator/sidecar/wal-replica images
+version: 0.2.0           # Chart version
+appVersion: "0.2.0"      # Default tag for operator/sidecar/wal-replica images
 ```
 
 ### values.yaml
 
 ```yaml
-# Database image version (extension + gateway) — independent of Chart.appVersion
+# Deprecated compatibility field
 documentDbVersion: "0.109.0"
 
 image:
   documentdbk8soperator:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.2.0
+    digest: ""
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/operator
     pullPolicy: Always
   sidecarinjector:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0.2.0
+    digest: ""
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar
     pullPolicy: Always
   walreplica:
+    ref: ""
+    digest: ""
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: Always
+
+runtimeDefaults:
+  documentdb:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0
+    digest: ""
+  gateway:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0
+    digest: ""
+  postgres:
+    ref: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+    digest: ""
 ```
 
 ### Image Tag Resolution in Templates
 
-**Operator-track images** use `Chart.AppVersion`:
+**Operator-track deployment images** now default to explicit released refs from `values.yaml`, and use immutable `ref@digest` when a digest is present:
 ```yaml
-image: "{{ .Values.image.documentdbk8soperator.repository }}:{{ .Values.image.documentdbk8soperator.tag | default .Chart.AppVersion }}"
+image: "{{ .Values.image.documentdbk8soperator.ref | default (printf "%s:%s" .Values.image.documentdbk8soperator.repository .Chart.AppVersion) }}"
 ```
 
-**Database version** is passed as an environment variable:
+**Runtime defaults** are passed to the operator as explicit image refs:
 ```yaml
-{{- if .Values.documentDbVersion }}
-- name: DOCUMENTDB_VERSION
-  value: "{{ .Values.documentDbVersion }}"
-{{- end }}
+- name: DEFAULT_DOCUMENTDB_IMAGE
+  value: "{{ .Values.runtimeDefaults.documentdb.ref }}"
+- name: DEFAULT_GATEWAY_IMAGE
+  value: "{{ .Values.runtimeDefaults.gateway.ref }}"
 ```
 
-The `DOCUMENTDB_VERSION` env var feeds into the operator's image resolution chain (priority 3). If not set, the operator uses its compiled-in defaults.
+During the compatibility window, the chart still also passes `DOCUMENTDB_VERSION` when `documentDbVersion` is set so older callers continue to work, but release workflows and test workflows should prefer the explicit runtime default refs.
 
 ---
 
@@ -189,13 +239,14 @@ Builds operator and sidecar images from this repo's Go source.
 
 | Aspect | Details |
 |--------|---------|
-| **Trigger** | `workflow_dispatch`, `push` to `main` (operator source paths) |
+| **Trigger** | `workflow_dispatch`, `workflow_call`, `push` to `main` (operator source paths) |
 | **Images** | operator, sidecar |
 | **Dockerfiles** | `operator/src/Dockerfile`, `operator/cnpg-plugins/sidecar-injector/Dockerfile` |
 | **Tag pattern** | `{version}-test` (candidate), `{version}-test-{arch}` (per-arch) |
 | **Build time** | ~2 minutes |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
+| **Outputs** | Multi-arch candidate images plus `operator-candidate-bundle` artifact (refs + digests) |
 
 ### Database Image Build (`build_documentdb_images.yml`)
 
@@ -203,7 +254,7 @@ Builds documentdb extension and gateway images from public DocumentDB release ar
 
 | Aspect | Details |
 |--------|---------|
-| **Trigger** | `workflow_dispatch`, `repository_dispatch` (from upstream) |
+| **Trigger** | `workflow_dispatch`, `workflow_call`, `repository_dispatch` (from upstream) |
 | **Images** | documentdb, gateway |
 | **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_public_image` |
 | **Tag pattern** | `{documentdb_version}-build-{run_id}-{attempt}-{sha}` (candidate) |
@@ -211,6 +262,7 @@ Builds documentdb extension and gateway images from public DocumentDB release ar
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
 | **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.109.0`) |
+| **Outputs** | Multi-arch candidate images plus `database-candidate-bundle` artifact (refs + digests) |
 
 The build process:
 1. Resolves the released DocumentDB version to package
@@ -251,15 +303,38 @@ The build process:
 
 ## Release Pipelines
 
+### Top-Level Orchestrator (`release.yml`)
+
+Preferred entrypoint for maintainers. It coordinates track-specific releases and creates a single metadata PR for `scope=full`.
+
+```
+Inputs:
+  scope: operator | database | full
+  operator_candidate_version: "0.2.0-test"
+  operator_version: "0.2.0"
+  database_candidate_version: "0.111.0-build-123456789-1-deadbee"
+  database_version: "0.111.0"
+  source_ref: <git tag or commit>   ← required for operator/full
+  run_tests: true
+
+Flow:
+  1. Validate requested inputs for the selected scope
+  2. Run database release first for scope=full
+  3. Run operator release (with optional database-track override for chart packaging)
+  4. Create one consolidated metadata PR for scope=full
+```
+
 ### Operator Release (`release_operator.yml`)
 
 Promotes operator/sidecar candidate images and publishes the Helm chart.
 
 ```
 Inputs:
-  candidate_version: "0.1.3-test"   ← source tag
-  version: "0.1.3"                  ← target release tag
+  candidate_version: "0.2.0-test"   ← source tag
+  version: "0.2.0"                  ← target release tag
   source_ref: <git tag or commit>   ← for Helm chart packaging
+  database_version: "0.111.0"       ← optional override when packaging a full release
+  update_release_metadata: true
 
 Flow:
   1. Test Gate (optional, parallel)
@@ -267,15 +342,18 @@ Flow:
      ├── test-integration.yml
      └── test-backup-and-restore.yml
   
-  2. Promote Images
-     └── docker buildx imagetools create
-         -t .../operator:0.1.3  .../operator:0.1.3-test
-         -t .../sidecar:0.1.3   .../sidecar:0.1.3-test
-  
-  3. Publish Helm Chart
-     ├── Update Chart.yaml (version + appVersion)
-     ├── helm package + helm push to oci://ghcr.io/{owner}
-     └── Publish to GitHub Pages (Helm repo index)
+   2. Promote Images
+      └── docker buildx imagetools create
+          -t .../operator:0.2.0  .../operator:0.2.0-test
+          -t .../sidecar:0.2.0   .../sidecar:0.2.0-test
+   
+   3. Publish Helm Chart
+      ├── Sync chart metadata from release/artifacts.yaml
+      ├── helm package + helm push to oci://ghcr.io/{owner}
+      └── Publish to GitHub Pages (Helm repo index)
+
+   4. Optional Metadata PR
+      └── Sync release/artifacts.yaml, chart defaults, workflow defaults, and promoted digests
 ```
 
 ### Database Image Release (`release_documentdb_images.yml`)
@@ -294,12 +372,14 @@ Flow:
          -t .../documentdb:0.111.0  .../documentdb:0.111.0-test
          -t .../gateway:0.111.0     .../gateway:0.111.0-test
   
-  2. Update Defaults (auto-PR)
-     ├── constants.go: DEFAULT_DOCUMENTDB_IMAGE, DEFAULT_GATEWAY_IMAGE
-     ├── config.go: sidecar plugin default gateway image
-     ├── values.yaml: documentDbVersion
-     ├── test-backup-and-restore.yml: fallback images
-     └── Opens PR: "chore: bump DocumentDB images to 0.111.0"
+   2. Update Defaults (auto-PR)
+      ├── values.yaml: runtimeDefaults.documentdb.ref / runtimeDefaults.gateway.ref
+      ├── values.yaml: documentDbVersion (compatibility field)
+      ├── release/artifacts.yaml: databaseTrack + image refs/digests
+      ├── release.yml / build_documentdb_images.yml / release_documentdb_images.yml defaults
+      ├── test-upgrade-and-rollback.yml: released baseline
+      ├── Dockerfile_gateway_public_image: SOURCE_IMAGE ARG default
+      └── Opens PR: "chore: bump DocumentDB images to 0.111.0"
 ```
 
 ---
@@ -320,7 +400,7 @@ Reusable workflow that builds ALL images (operator + database) locally for test 
 |----------|---------|---------------------|
 | `test-E2E.yml` | push/PR/schedule/dispatch | Standard — local build or external images |
 | `test-integration.yml` | push/PR/dispatch | Standard — local build or external images |
-| `test-backup-and-restore.yml` | push/PR/schedule/dispatch | Has hardcoded fallback images for external mode |
+| `test-backup-and-restore.yml` | push/PR/schedule/dispatch | Reads explicit runtime default refs for external mode |
 | `test-upgrade-and-rollback.yml` | push/PR/schedule/dispatch | Old/new image comparison; combined image for chart ≤0.1.3 |
 | `test-unit.yml` | push/PR | No container images |
 
@@ -364,29 +444,34 @@ The script uses `kind_with_registry.sh` to set up a `registry:2` container on `l
 
 ## Version Synchronization Points
 
-When bumping database image versions, the following locations must be updated (automated by `release_documentdb_images.yml`):
+When bumping database image versions, the following locations are synchronized from `release/artifacts.yaml` by `go run ./cmd/release-manifest sync` (typically invoked by `release_documentdb_images.yml` or `release.yml`):
 
 | File | Field | Example |
 |------|-------|---------|
-| `operator/src/internal/utils/constants.go` | `DEFAULT_DOCUMENTDB_IMAGE` | `...documentdb:0.109.0` |
-| `operator/src/internal/utils/constants.go` | `DEFAULT_GATEWAY_IMAGE` | `...gateway:0.109.0` |
-| `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.109.0` |
-| `operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go` | Expected gateway image | `...gateway:0.109.0` |
-| `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.109.0"` |
-| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.109.0` |
+| `operator/documentdb-helm-chart/values.yaml` | `runtimeDefaults.documentdb.ref`, `runtimeDefaults.documentdb.digest` | `...documentdb:0.109.0`, `sha256:...` |
+| `operator/documentdb-helm-chart/values.yaml` | `runtimeDefaults.gateway.ref`, `runtimeDefaults.gateway.digest` | `...gateway:0.109.0`, `sha256:...` |
+| `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` (compatibility) | `"0.109.0"` |
+| `release/artifacts.yaml` | `channels.databaseTrack`, image refs/digests | `0.109.0`, `...documentdb:0.109.0`, `sha256:...` |
 | `.github/workflows/test-upgrade-and-rollback.yml` | `RELEASED_DATABASE_VERSION` | `0.109.0` |
 | `.github/workflows/build_documentdb_images.yml` | `DEFAULT_DOCUMENTDB_VERSION`, input default | `0.109.0` |
 | `.github/workflows/release_documentdb_images.yml` | Input default | `0.109.0` |
+| `.github/workflows/release.yml` | `database_version` default | `0.109.0` |
 | `.github/dockerfiles/Dockerfile_gateway_public_image` | `SOURCE_IMAGE` ARG default | `...pg17-0.109.0` |
 
-When bumping operator versions, update:
+When bumping operator versions, the following locations are synchronized from `release/artifacts.yaml` by `go run ./cmd/release-manifest sync`:
 
 | File | Field | Example |
 |------|-------|---------|
-| `operator/documentdb-helm-chart/Chart.yaml` | `version`, `appVersion` | `0.1.3` |
+| `operator/documentdb-helm-chart/Chart.yaml` | `version`, `appVersion` | `0.2.0` |
+| `release/artifacts.yaml` | `chart.version`, `chart.appVersion`, `channels.operatorTrack`, image refs/digests | `0.2.0`, `.../operator:0.2.0`, `sha256:...` |
+| `operator/documentdb-helm-chart/values.yaml` | `image.documentdbk8soperator.ref`, `image.documentdbk8soperator.digest` | `.../operator:0.2.0`, `sha256:...` |
+| `operator/documentdb-helm-chart/values.yaml` | `image.sidecarinjector.ref`, `image.sidecarinjector.digest` | `.../sidecar:0.2.0`, `sha256:...` |
+| `.github/workflows/build_operator_images.yml` | Input default, `env.VERSION`, `env.IMAGE_TAG` | `0.2.0`, `0.2.0-test` |
+| `.github/workflows/release_operator.yml` | Candidate/default inputs | `0.2.0-test`, `0.2.0` |
+| `.github/workflows/release.yml` | `operator_candidate_version`, `operator_version` defaults | `0.2.0-test`, `0.2.0` |
 | `CHANGELOG.md` | New version entry | `## [0.1.3]` |
 
-> **Note**: The `constants.go` and `config.go` defaults must be kept in sync — this is enforced by a `NOTE: Keep in sync` comment in both files.
+> **Note**: Runtime image defaults are no longer maintained via compiled operator/sidecar constants. The canonical release source is `release/artifacts.yaml`, and the sync tool keeps the chart and workflow defaults aligned with it.
 
 ---
 

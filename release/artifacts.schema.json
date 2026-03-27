@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/release/artifacts.schema.json",
+  "title": "DocumentDB Kubernetes Operator release artifacts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "chart",
+    "channels",
+    "images",
+    "postgres"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "v1alpha1"
+    },
+    "chart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "appVersion"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "appVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        }
+      }
+    },
+    "channels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operatorTrack",
+        "databaseTrack"
+      ],
+      "properties": {
+        "operatorTrack": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "databaseTrack": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "sidecar",
+        "documentdb",
+        "gateway"
+      ],
+      "properties": {
+        "operator": {
+          "$ref": "#/$defs/artifact"
+        },
+        "sidecar": {
+          "$ref": "#/$defs/artifact"
+        },
+        "documentdb": {
+          "$ref": "#/$defs/artifact"
+        },
+        "gateway": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "postgres": {
+      "$ref": "#/$defs/artifact"
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[^@\\s]+:[^@\\s]+$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

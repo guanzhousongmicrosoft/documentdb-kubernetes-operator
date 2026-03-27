@@ -89,8 +89,9 @@ spec:
         app: wal-replica
     spec:
       serviceAccountName: wal-replica-manager
+      {{- $walReplicaImage := include "documentdb-chart.renderImage" (dict "ref" .Values.image.walreplica.ref "digest" .Values.image.walreplica.digest "repository" .Values.image.walreplica.repository "tag" .Values.image.walreplica.tag "defaultTag" .Chart.AppVersion) }}
       containers:
-      - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag | default .Chart.AppVersion }}"  
+      - image: "{{ $walReplicaImage }}"
         imagePullPolicy: "{{ .Values.image.walreplica.pullPolicy }}"
         name: cnpg-i-wal-replica
         ports:

@@ -177,6 +177,7 @@ var _ = Describe("getDefaultBootstrapConfiguration", func() {
 
 var _ = Describe("GetCnpgClusterSpec", func() {
 	var log = zap.New(zap.WriteTo(GinkgoWriter))
+	const defaultGatewayImage = "ghcr.io/example/gateway:1.0"
 
 	It("creates a CNPG cluster spec with default bootstrap", func() {
 		req := ctrl.Request{}
@@ -195,7 +196,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "standard", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", defaultGatewayImage, "test-sa", "standard", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Name).To(Equal("test-cluster"))
 		Expect(result.Namespace).To(Equal("default"))
@@ -241,7 +242,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "standard", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", defaultGatewayImage, "test-sa", "standard", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.Bootstrap).ToNot(BeNil())
 		Expect(result.Spec.Bootstrap.Recovery).ToNot(BeNil())
@@ -275,7 +276,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "standard", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", defaultGatewayImage, "test-sa", "standard", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.Bootstrap).ToNot(BeNil())
 		Expect(result.Spec.Bootstrap.Recovery).ToNot(BeNil())
@@ -301,7 +302,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "premium-storage", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", defaultGatewayImage, "test-sa", "premium-storage", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.StorageConfiguration.StorageClass).ToNot(BeNil())
 		Expect(*result.Spec.StorageConfiguration.StorageClass).To(Equal("premium-storage"))
@@ -323,7 +324,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", defaultGatewayImage, "test-sa", "", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.StorageConfiguration.StorageClass).To(BeNil())
 	})
@@ -350,7 +351,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", defaultGatewayImage, "test-sa", "", true, log)
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.Plugins).To(HaveLen(1))
 		Expect(result.Spec.Plugins[0].Parameters).To(HaveKey("gatewayTLSSecret"))
@@ -372,7 +373,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		}
 
 		GinkgoT().Setenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV, "Never")
-		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", "test-sa", "", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", defaultGatewayImage, "test-sa", "", true, log)
 		Expect(result.Spec.Plugins[0].Parameters).To(HaveKeyWithValue("gatewayImagePullPolicy", "Never"))
 	})
 
@@ -390,7 +391,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", "test-sa", "", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", defaultGatewayImage, "test-sa", "", true, log)
 		Expect(result.Spec.Plugins[0].Parameters).ToNot(HaveKey("gatewayImagePullPolicy"))
 	})
 
@@ -409,7 +410,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		}
 
 		GinkgoT().Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, "Never")
-		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", "test-sa", "", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", defaultGatewayImage, "test-sa", "", true, log)
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(Equal(corev1.PullNever))
 	})
 
@@ -427,7 +428,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", "test-sa", "", true, log)
+		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", defaultGatewayImage, "test-sa", "", true, log)
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.PullPolicy).To(BeEmpty())
 	})
 
@@ -448,7 +449,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 				},
 			}
 
-			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
+			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", defaultGatewayImage, "test-sa", "", true, log)
 			_, exists := cluster.Spec.PostgresConfiguration.Parameters["wal_level"]
 			Expect(exists).To(BeFalse())
 		})
@@ -472,7 +473,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 				},
 			}
 
-			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
+			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", defaultGatewayImage, "test-sa", "", true, log)
 			walLevel, exists := cluster.Spec.PostgresConfiguration.Parameters["wal_level"]
 			Expect(exists).To(BeTrue())
 			Expect(walLevel).To(Equal("logical"))
@@ -497,7 +498,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 				},
 			}
 
-			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
+			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", defaultGatewayImage, "test-sa", "", true, log)
 			_, exists := cluster.Spec.PostgresConfiguration.Parameters["wal_level"]
 			Expect(exists).To(BeFalse())
 		})
@@ -519,7 +520,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			},
 		}
 
-		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
+		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", defaultGatewayImage, "test-sa", "", true, log)
 		params := cluster.Spec.PostgresConfiguration.Parameters
 		Expect(params).To(HaveKeyWithValue("cron.database_name", "postgres"))
 		Expect(params).To(HaveKeyWithValue("max_replication_slots", "10"))

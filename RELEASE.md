@@ -54,7 +54,9 @@ The agent will update:
 | `operator/documentdb-helm-chart/Chart.yaml` | `version` and `appVersion` |
 | `CHANGELOG.md` | New version entry at top |
 
-> **Note:** The agent does NOT modify `values.yaml` - the CI workflow handles image tag updates during release.
+> **Note:** The agent does NOT modify `values.yaml` or `release/artifacts.yaml` directly. The release workflows now sync those release-controlled files from the canonical manifest during promotion.
+>
+> **Artifact manifest:** `release/artifacts.yaml` is now the canonical inventory for chart metadata and default runtime image references. Any PR that changes chart metadata or default image references should keep this file in sync. Phase 1 validation checks it against `Chart.yaml`, `values.yaml`, operator defaults, and sidecar defaults.
 
 ### Step 3: Create PR
 
@@ -69,17 +71,34 @@ This creates a branch `release/v{version}` and opens a PR.
 
 After the PR is approved and merged:
 
-#### Operator Release (operator + sidecar images + Helm chart)
+#### Preferred path: top-level release orchestrator
 
-1. Run **"RELEASE - Build Operator Candidate Images"** (`build_operator_images.yml`) with the operator version
-2. Run **"RELEASE - Promote Operator Images and Publish Helm Chart"** (`release_operator.yml`) to promote and publish
+1. Build the candidate images you need:
+   - **Operator track**: run **"RELEASE - Build Operator Candidate Images"** (`build_operator_images.yml`)
+   - **Database track**: run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`)
+2. Review the uploaded candidate bundle artifact from the build workflow:
+   - `operator-candidate-bundle`
+   - `database-candidate-bundle`
+   - each bundle includes candidate image refs and digests
+3. Run **"RELEASE - Orchestrate Artifact Release"** (`release.yml`) with:
+   - `scope=operator` for operator + sidecar + Helm only
+   - `scope=database` for documentdb + gateway only
+   - `scope=full` for both tracks with a single metadata PR
+4. Provide the required versions:
+   - `operator_candidate_version` / `operator_version`
+   - `database_candidate_version` / `database_version`
+   - `source_ref` for Helm packaging when releasing the operator track
+5. Let the workflow create the release-metadata PR:
+   - operator-only and database-only releases let the track workflow create the PR
+   - full releases create a single consolidated PR from `release.yml`
+   - the PR now syncs promoted image digests into `release/artifacts.yaml` and Helm defaults when available
 
-#### Database Image Release (documentdb extension + gateway)
+#### Advanced path: track-specific release workflows
 
-Database images follow an **independent release cycle** from the operator:
+- **Operator track**: `release_operator.yml`
+- **Database track**: `release_documentdb_images.yml`
 
-1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the released DocumentDB `version`
-2. Run **"RELEASE - Promote DocumentDB Images"** (`release_documentdb_images.yml`) to promote and auto-create a PR that bumps default image versions across the codebase
+Use these directly only when you intentionally want a single-track release without the top-level orchestration layer.
 
 > **Note:** The deprecated combined workflows (`build_images.yml`, `release_images.yml`) are still available but will be removed in a future release.
 
@@ -117,7 +136,7 @@ Add entry to top of `CHANGELOG.md`:
 
 ```bash
 git checkout -b release/vX.Y.Z
-git add operator/documentdb-helm-chart/Chart.yaml CHANGELOG.md
+git add operator/documentdb-helm-chart/Chart.yaml CHANGELOG.md release/artifacts.yaml
 git commit -m "chore: prepare release X.Y.Z"
 git push origin release/vX.Y.Z
 gh pr create --title "chore: release vX.Y.Z" --base main
@@ -125,7 +144,7 @@ gh pr create --title "chore: release vX.Y.Z" --base main
 
 ### 4. Trigger Release Workflows
 
-After merge, trigger the release workflows as described above.
+After merge, follow the preferred orchestrated flow above. In normal releases, `release/artifacts.yaml` and its downstream synchronized files should be updated by the release workflows, not by hand.
 
 ---
 
@@ -150,6 +169,7 @@ If a release has critical issues:
 2. Consider yanking problematic container images
 3. Update GitHub release to mark as problematic
 4. Communicate in GitHub Discussions
+5. Use the previous merged release-metadata PR (and its `release/artifacts.yaml` snapshot) as the rollback source of truth for image refs and digests
 
 ---
 

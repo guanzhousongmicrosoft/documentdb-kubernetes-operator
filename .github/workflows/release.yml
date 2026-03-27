@@ -1,0 +1,235 @@
+name: RELEASE - Orchestrate Artifact Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Release scope'
+        required: true
+        default: full
+        type: choice
+        options:
+          - operator
+          - database
+          - full
+      operator_candidate_version:
+        description: 'Operator candidate tag (required for operator/full)'
+        required: false
+        default: '0.2.0-test'
+        type: string
+      operator_version:
+        description: 'Operator release version (required for operator/full)'
+        required: false
+        default: '0.2.0'
+        type: string
+      database_candidate_version:
+        description: 'Database candidate tag (required for database/full)'
+        required: false
+        type: string
+      database_version:
+        description: 'Database release version (required for database/full)'
+        required: false
+        default: '0.109.0'
+        type: string
+      source_ref:
+        description: 'Git ref used to package the Helm chart (required for operator/full)'
+        required: false
+        default: 'main'
+        type: string
+      run_tests:
+        description: 'Run pre-release tests for operator releases'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  id-token: write
+  actions: read
+
+jobs:
+  validate:
+    name: Validate Inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate requested scope inputs
+        run: |
+          set -euo pipefail
+
+          case "${{ inputs.scope }}" in
+            operator)
+              [[ -n "${{ inputs.operator_candidate_version }}" ]] || { echo "operator_candidate_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.operator_version }}" ]] || { echo "operator_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.source_ref }}" ]] || { echo "source_ref is required" >&2; exit 1; }
+              ;;
+            database)
+              [[ -n "${{ inputs.database_candidate_version }}" ]] || { echo "database_candidate_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.database_version }}" ]] || { echo "database_version is required" >&2; exit 1; }
+              ;;
+            full)
+              [[ -n "${{ inputs.operator_candidate_version }}" ]] || { echo "operator_candidate_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.operator_version }}" ]] || { echo "operator_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.database_candidate_version }}" ]] || { echo "database_candidate_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.database_version }}" ]] || { echo "database_version is required" >&2; exit 1; }
+              [[ -n "${{ inputs.source_ref }}" ]] || { echo "source_ref is required" >&2; exit 1; }
+              ;;
+            *)
+              echo "Unsupported scope: ${{ inputs.scope }}" >&2
+              exit 1
+              ;;
+          esac
+
+  release-operator-only:
+    name: Release Operator Track
+    if: ${{ inputs.scope == 'operator' }}
+    needs: validate
+    uses: ./.github/workflows/release_operator.yml
+    with:
+      candidate_version: ${{ inputs.operator_candidate_version }}
+      version: ${{ inputs.operator_version }}
+      source_ref: ${{ inputs.source_ref }}
+      database_version: ''
+      run_tests: ${{ inputs.run_tests }}
+      update_release_metadata: true
+    secrets: inherit
+
+  release-database-only:
+    name: Release Database Track
+    if: ${{ inputs.scope == 'database' }}
+    needs: validate
+    uses: ./.github/workflows/release_documentdb_images.yml
+    with:
+      candidate_version: ${{ inputs.database_candidate_version }}
+      version: ${{ inputs.database_version }}
+      update_defaults: true
+    secrets: inherit
+
+  release-database-full:
+    name: Release Database Track (Full Release)
+    if: ${{ inputs.scope == 'full' }}
+    needs: validate
+    uses: ./.github/workflows/release_documentdb_images.yml
+    with:
+      candidate_version: ${{ inputs.database_candidate_version }}
+      version: ${{ inputs.database_version }}
+      update_defaults: false
+    secrets: inherit
+
+  release-operator-full:
+    name: Release Operator Track (Full Release)
+    if: ${{ inputs.scope == 'full' }}
+    needs: [validate, release-database-full]
+    uses: ./.github/workflows/release_operator.yml
+    with:
+      candidate_version: ${{ inputs.operator_candidate_version }}
+      version: ${{ inputs.operator_version }}
+      source_ref: ${{ inputs.source_ref }}
+      database_version: ${{ inputs.database_version }}
+      run_tests: ${{ inputs.run_tests }}
+      update_release_metadata: false
+    secrets: inherit
+
+  update-release-metadata-full:
+    name: Update Release Metadata (Full Release)
+    if: ${{ inputs.scope == 'full' }}
+    needs: [release-database-full, release-operator-full]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/src/go.mod
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Resolve promoted image digests
+        id: release_digests
+        run: |
+          set -euo pipefail
+          OPERATOR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/operator:${{ inputs.operator_version }} | awk '/^Digest:/ { print $2 }')
+          SIDECAR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/sidecar:${{ inputs.operator_version }} | awk '/^Digest:/ { print $2 }')
+          DOCUMENTDB_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/documentdb:${{ inputs.database_version }} | awk '/^Digest:/ { print $2 }')
+          GATEWAY_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/gateway:${{ inputs.database_version }} | awk '/^Digest:/ { print $2 }')
+          echo "operator_digest=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
+          echo "sidecar_digest=$SIDECAR_DIGEST" >> $GITHUB_OUTPUT
+          echo "documentdb_digest=$DOCUMENTDB_DIGEST" >> $GITHUB_OUTPUT
+          echo "gateway_digest=$GATEWAY_DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Sync repository from canonical manifest
+        run: |
+          cd operator/src
+          go run ./cmd/release-manifest sync \
+            --manifest ../../release/artifacts.yaml \
+            --repo-root ../.. \
+            --operator-track "${{ inputs.operator_version }}" \
+            --database-track "${{ inputs.database_version }}" \
+            --operator-digest "${{ steps.release_digests.outputs.operator_digest }}" \
+            --sidecar-digest "${{ steps.release_digests.outputs.sidecar_digest }}" \
+            --documentdb-digest "${{ steps.release_digests.outputs.documentdb_digest }}" \
+            --gateway-digest "${{ steps.release_digests.outputs.gateway_digest }}"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: sync release metadata for operator ${{ inputs.operator_version }} and database ${{ inputs.database_version }}"
+          title: "chore: sync release metadata for operator ${{ inputs.operator_version }} and database ${{ inputs.database_version }}"
+          body: |
+            ## Automated Full Release Metadata Update
+
+            This PR syncs the canonical release metadata after a full artifact release.
+
+            ### Included releases
+            - Operator / chart: `${{ inputs.operator_version }}`
+            - Database images: `${{ inputs.database_version }}`
+
+            ### Changes
+            - Updated `release/artifacts.yaml`
+            - Synced Helm chart metadata and defaults from the canonical manifest
+            - Synced workflow defaults and upgrade baselines from the canonical manifest
+            - Updated the public gateway Dockerfile source image default
+
+            ---
+            *Auto-generated by `release.yml`*
+          branch: auto/full-release-${{ inputs.operator_version }}-${{ inputs.database_version }}
+          delete-branch: true
+          labels: |
+            automated
+            version-bump
+
+  summary:
+    name: Release Summary
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - release-operator-only
+      - release-database-only
+      - release-database-full
+      - release-operator-full
+      - update-release-metadata-full
+    if: ${{ always() }}
+    steps:
+      - name: Summarize release orchestration
+        run: |
+          echo "## Release Orchestration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Scope**: \`${{ inputs.scope }}\`" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ inputs.scope }}" == "operator" || "${{ inputs.scope }}" == "full" ]]; then
+            echo "- **Operator Candidate**: \`${{ inputs.operator_candidate_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Operator Release**: \`${{ inputs.operator_version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ inputs.scope }}" == "database" || "${{ inputs.scope }}" == "full" ]]; then
+            echo "- **Database Candidate**: \`${{ inputs.database_candidate_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Database Release**: \`${{ inputs.database_version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "${{ inputs.scope }}" == "full" ]]; then
+            echo "- **Metadata Update**: single consolidated PR from \`release.yml\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Metadata Update**: handled by the track-specific release workflow" >> $GITHUB_STEP_SUMMARY
+          fi

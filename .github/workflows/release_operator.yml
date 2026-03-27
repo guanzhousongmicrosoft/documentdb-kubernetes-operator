@@ -18,16 +18,58 @@ on:
       source_ref:
         description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
         required: true
+      database_version:
+        description: 'Optional database track override for packaging the chart during a full release'
+        required: false
+        default: ''
       run_tests:
         description: 'Run tests before releasing'
         required: false
         default: true
         type: boolean
+      update_release_metadata:
+        description: 'Create a PR that syncs release/artifacts.yaml and downstream files after promotion'
+        required: false
+        default: true
+        type: boolean
+
+  workflow_call:
+    inputs:
+      candidate_version:
+        description: 'Operator candidate tag to promote (e.g., 0.2.0-test)'
+        required: false
+        type: string
+        default: '0.2.0-test'
+      version:
+        description: 'Release version for operator images and Helm chart'
+        required: false
+        type: string
+        default: '0.2.0'
+      source_ref:
+        description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
+        required: true
+        type: string
+      database_version:
+        description: 'Optional database track override for packaging the chart during a full release'
+        required: false
+        type: string
+        default: ''
+      run_tests:
+        description: 'Run tests before releasing'
+        required: false
+        default: true
+        type: boolean
+      update_release_metadata:
+        description: 'Create a PR that syncs release/artifacts.yaml and downstream files after promotion'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   actions: read
+  pull-requests: write
   id-token: write
 
 jobs:
@@ -105,34 +147,61 @@ jobs:
         with:
           ref: ${{ inputs.source_ref }}
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/src/go.mod
+
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Set chart version
-        run: |
-            echo "CHART_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
-            echo "Using chart version: ${{ inputs.version }}"
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Update Chart.yaml metadata
+      - name: Resolve promoted image digests
+        id: release_digests
         run: |
-          sed -i "s/^version: .*/version: ${CHART_VERSION}/" operator/documentdb-helm-chart/Chart.yaml
-          sed -i "s/^appVersion: .*/appVersion: \"${CHART_VERSION}\"/" operator/documentdb-helm-chart/Chart.yaml
-          echo "Chart.yaml after update:"
-          cat operator/documentdb-helm-chart/Chart.yaml
-
-      - name: Verify values.yaml has explicit documentDbVersion
-        run: |
-          DOCDB_VERSION=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
-          if [[ -z "$DOCDB_VERSION" || "$DOCDB_VERSION" == '""' ]]; then
-            echo "WARNING: documentDbVersion is empty in values.yaml. Database images will use compiled defaults."
+          set -euo pipefail
+          OPERATOR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/operator:${{ inputs.version }} | awk '/^Digest:/ { print $2 }')
+          SIDECAR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/sidecar:${{ inputs.version }} | awk '/^Digest:/ { print $2 }')
+          if [[ -n "${{ inputs.database_version }}" ]]; then
+            DOCUMENTDB_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/documentdb:${{ inputs.database_version }} | awk '/^Digest:/ { print $2 }')
+            GATEWAY_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/gateway:${{ inputs.database_version }} | awk '/^Digest:/ { print $2 }')
           else
-            echo "documentDbVersion is set to: $DOCDB_VERSION"
+            DOCUMENTDB_DIGEST=""
+            GATEWAY_DIGEST=""
+          fi
+          echo "operator_digest=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
+          echo "sidecar_digest=$SIDECAR_DIGEST" >> $GITHUB_OUTPUT
+          echo "documentdb_digest=$DOCUMENTDB_DIGEST" >> $GITHUB_OUTPUT
+          echo "gateway_digest=$GATEWAY_DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Sync chart metadata from canonical manifest
+        run: |
+          cd operator/src
+          if [[ -n "${{ inputs.database_version }}" ]]; then
+            go run ./cmd/release-manifest sync \
+              --manifest ../../release/artifacts.yaml \
+              --repo-root ../.. \
+              --operator-track "${{ inputs.version }}" \
+              --database-track "${{ inputs.database_version }}" \
+              --operator-digest "${{ steps.release_digests.outputs.operator_digest }}" \
+              --sidecar-digest "${{ steps.release_digests.outputs.sidecar_digest }}" \
+              --documentdb-digest "${{ steps.release_digests.outputs.documentdb_digest }}" \
+              --gateway-digest "${{ steps.release_digests.outputs.gateway_digest }}"
+          else
+            go run ./cmd/release-manifest sync \
+              --manifest ../../release/artifacts.yaml \
+              --repo-root ../.. \
+              --operator-track "${{ inputs.version }}" \
+              --operator-digest "${{ steps.release_digests.outputs.operator_digest }}" \
+              --sidecar-digest "${{ steps.release_digests.outputs.sidecar_digest }}"
           fi
 
       - name: Package Helm chart
         run: |
           helm dependency update operator/documentdb-helm-chart
-          helm package $CHART_NAME --version $CHART_VERSION
+          helm package $CHART_NAME --version ${{ inputs.version }}
 
       - name: Log in to GHCR
         run: |
@@ -140,20 +209,23 @@ jobs:
 
       - name: Push Helm chart to GHCR
         run: |
-          CHART_FILE=$(ls documentdb-operator-${CHART_VERSION}.tgz 2>/dev/null || ls */documentdb-operator-${CHART_VERSION}.tgz 2>/dev/null)
+          CHART_FILE=$(ls documentdb-operator-${{ inputs.version }}.tgz 2>/dev/null || ls */documentdb-operator-${{ inputs.version }}.tgz 2>/dev/null)
           helm push "$CHART_FILE" oci://${GHCR_REPO}
 
       - name: Release summary
         run: |
           echo "## Operator Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Operator Version**: \`$CHART_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Operator Version**: \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Images Promoted**: operator, sidecar" >> $GITHUB_STEP_SUMMARY
           echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart Source Ref**: \`${{ inputs.source_ref }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: \`$GHCR_REPO\`" >> $GITHUB_STEP_SUMMARY
+          if [[ -n "${{ inputs.database_version }}" ]]; then
+            echo "- **Database Defaults Packaged**: \`${{ inputs.database_version }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Note**: Database images (documentdb, gateway) are released independently via \`release_documentdb_images.yml\`." >> $GITHUB_STEP_SUMMARY
+          echo "**Note**: Database images (documentdb, gateway) are released independently via \`release_documentdb_images.yml\` or the top-level \`release.yml\` orchestrator." >> $GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------------
   # Publish Helm repository to GitHub Pages
@@ -175,3 +247,87 @@ jobs:
       normalize_chart_metadata: true
       allow_pages_source_mismatch: true
     secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # Sync release metadata back to the repository
+  # ---------------------------------------------------------------------------
+  update-release-metadata:
+    name: Update Release Metadata
+    runs-on: ubuntu-latest
+    needs: publish-helm-pages
+    if: ${{ inputs.update_release_metadata == true && always() && needs.publish-helm-pages.result == 'success' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/src/go.mod
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Resolve promoted image digests
+        id: release_digests
+        run: |
+          set -euo pipefail
+          OPERATOR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/operator:${{ inputs.version }} | awk '/^Digest:/ { print $2 }')
+          SIDECAR_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/sidecar:${{ inputs.version }} | awk '/^Digest:/ { print $2 }')
+          if [[ -n "${{ inputs.database_version }}" ]]; then
+            DOCUMENTDB_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/documentdb:${{ inputs.database_version }} | awk '/^Digest:/ { print $2 }')
+            GATEWAY_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/gateway:${{ inputs.database_version }} | awk '/^Digest:/ { print $2 }')
+          else
+            DOCUMENTDB_DIGEST=""
+            GATEWAY_DIGEST=""
+          fi
+          echo "operator_digest=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
+          echo "sidecar_digest=$SIDECAR_DIGEST" >> $GITHUB_OUTPUT
+          echo "documentdb_digest=$DOCUMENTDB_DIGEST" >> $GITHUB_OUTPUT
+          echo "gateway_digest=$GATEWAY_DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Sync repository from canonical manifest
+        run: |
+          cd operator/src
+          if [[ -n "${{ inputs.database_version }}" ]]; then
+            go run ./cmd/release-manifest sync \
+              --manifest ../../release/artifacts.yaml \
+              --repo-root ../.. \
+              --operator-track "${{ inputs.version }}" \
+              --database-track "${{ inputs.database_version }}" \
+              --operator-digest "${{ steps.release_digests.outputs.operator_digest }}" \
+              --sidecar-digest "${{ steps.release_digests.outputs.sidecar_digest }}" \
+              --documentdb-digest "${{ steps.release_digests.outputs.documentdb_digest }}" \
+              --gateway-digest "${{ steps.release_digests.outputs.gateway_digest }}"
+          else
+            go run ./cmd/release-manifest sync \
+              --manifest ../../release/artifacts.yaml \
+              --repo-root ../.. \
+              --operator-track "${{ inputs.version }}" \
+              --operator-digest "${{ steps.release_digests.outputs.operator_digest }}" \
+              --sidecar-digest "${{ steps.release_digests.outputs.sidecar_digest }}"
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump operator release metadata to ${{ inputs.version }}"
+          title: "chore: bump operator release metadata to ${{ inputs.version }}"
+          body: |
+            ## Automated Operator Release Metadata Update
+
+            Promoted images `operator` and `sidecar` from candidate `${{ inputs.candidate_version }}` to release `${{ inputs.version }}`.
+
+            ### Changes
+            - Updated `release/artifacts.yaml`
+            - Synced `Chart.yaml` from the canonical manifest
+            - Synced chart runtime defaults and workflow defaults from the canonical manifest
+
+            ---
+            *Auto-generated by `release_operator.yml`*
+          branch: auto/operator-${{ inputs.version }}
+          delete-branch: true
+          labels: |
+            automated
+            version-bump
