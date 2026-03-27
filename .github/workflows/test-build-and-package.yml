@@ -29,6 +29,7 @@ env:
   IMAGE_TAG: ${{ inputs.version }}-test-${{ github.run_id }}
   CHART_NAME: operator/documentdb-helm-chart
   CHART_VERSION: ${{ inputs.version }}-test-${{ github.run_id }}
+  DOCKER_CONFIG: /tmp/docker-config
 
 jobs:
   build-operator:
@@ -48,6 +49,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Reset Docker auth config
+      run: |
+        mkdir -p "$DOCKER_CONFIG"
+        printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -94,6 +100,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Reset Docker auth config
+      run: |
+        mkdir -p "$DOCKER_CONFIG"
+        printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -145,6 +156,11 @@ jobs:
         repository: ${{ env.DOCUMENTDB_REPO }}
         ref: ${{ env.DOCUMENTDB_REPO_REF }}
 
+    - name: Reset Docker auth config
+      run: |
+        mkdir -p "$DOCKER_CONFIG"
+        printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
+
     - name: Build extension deb (PG18)
       run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
 
@@ -191,6 +207,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Reset Docker auth config
+      run: |
+        mkdir -p "$DOCKER_CONFIG"
+        printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
 
     - name: Download packages
       uses: actions/download-artifact@v4
@@ -253,6 +274,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+
+    - name: Reset Docker auth config
+      run: |
+        mkdir -p "$DOCKER_CONFIG"
+        printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
 
     - name: Download packages
       uses: actions/download-artifact@v4

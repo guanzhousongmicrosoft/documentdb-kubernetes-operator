@@ -18,14 +18,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, gatewayImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
 	sidecarPluginName := documentdb.Spec.SidecarInjectorPluginName
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
 	}
 
-	// Get the gateway image for this DocumentDB instance
-	gatewayImage := util.GetGatewayImageForDocumentDB(documentdb)
 	log.Info("Creating CNPG cluster with gateway image", "gatewayImage", gatewayImage, "documentdbName", documentdb.Name, "specGatewayImage", documentdb.Spec.GatewayImage)
 
 	credentialSecretName := documentdb.Spec.DocumentDbCredentialSecret

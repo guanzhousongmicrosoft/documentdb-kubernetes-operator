@@ -386,9 +386,10 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 	tests := []struct {
 		name       string
 		documentdb *dbpreview.DocumentDB
+		env        map[string]string
 		expected   string
+		wantErr    string
 	}{
-		// Priority 1: spec.DocumentDBImage overrides everything
 		{
 			name: "custom image overrides feature gate",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
@@ -397,8 +398,6 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 			}},
 			expected: "custom-registry/custom-image:v1",
 		},
-
-		// Priority 2: spec.DocumentDBVersion
 		{
 			name: "documentDBVersion resolves extension image",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
@@ -414,49 +413,78 @@ func TestGetDocumentDBImageForInstance(t *testing.T) {
 			}},
 			expected: "custom-registry/custom-image:v1",
 		},
-
-		// Priority 3: ChangeStreams feature gate
 		{
-			name: "ChangeStreams enabled returns changestream image",
+			name:       "DEFAULT_DOCUMENTDB_IMAGE env var resolves extension image",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
+			env: map[string]string{
+				DEFAULT_DOCUMENTDB_IMAGE_ENV: "ghcr.io/example/documentdb:9.9.9",
+			},
+			expected: "ghcr.io/example/documentdb:9.9.9",
+		},
+		{
+			name:       "DEFAULT_DOCUMENTDB_IMAGE env var takes precedence over DOCUMENTDB_VERSION",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
+			env: map[string]string{
+				DEFAULT_DOCUMENTDB_IMAGE_ENV: "ghcr.io/example/documentdb:9.9.9",
+				DOCUMENTDB_VERSION_ENV:       "0.200.0",
+			},
+			expected: "ghcr.io/example/documentdb:9.9.9",
+		},
+		{
+			name:       "DOCUMENTDB_VERSION env var resolves extension image",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
+			env: map[string]string{
+				DOCUMENTDB_VERSION_ENV: "0.200.0",
+			},
+			expected: DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.200.0",
+		},
+		{
+			name: "ChangeStreams enabled returns changestream image when defaults are unset",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
 			}},
 			expected: CHANGESTREAM_DOCUMENTDB_IMAGE,
 		},
 		{
-			name: "ChangeStreams explicitly disabled falls through to default",
+			name: "ChangeStreams explicitly disabled without configured default returns error",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false},
 			}},
-			expected: DEFAULT_DOCUMENTDB_IMAGE,
+			wantErr: "no default documentdb image configured",
 		},
-
-		// Priority 3: default image (no overrides)
 		{
-			name:       "default image when no overrides",
+			name:       "no overrides without configured default returns error",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
-			expected:   DEFAULT_DOCUMENTDB_IMAGE,
+			wantErr:    "no default documentdb image configured",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GetDocumentDBImageForInstance(tt.documentdb)
+			t.Setenv(DEFAULT_DOCUMENTDB_IMAGE_ENV, "")
+			t.Setenv(DOCUMENTDB_VERSION_ENV, "")
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
+			result, err := GetDocumentDBImageForInstance(tt.documentdb)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("expected error containing %q, got %q", tt.wantErr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GetDocumentDBImageForInstance() unexpected error: %v", err)
+			}
 			if result != tt.expected {
 				t.Errorf("GetDocumentDBImageForInstance() = %q, expected %q", result, tt.expected)
 			}
 		})
 	}
-
-	t.Run("DOCUMENTDB_VERSION env var resolves extension image", func(t *testing.T) {
-		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
-		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
-		result := GetDocumentDBImageForInstance(db)
-		expected := DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.200.0"
-		if result != expected {
-			t.Errorf("got %q, want %q", result, expected)
-		}
-	})
 }
 
 func TestGetPortFor(t *testing.T) {
@@ -506,13 +534,10 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 	tests := []struct {
 		name     string
 		spec     dbpreview.DocumentDBSpec
+		env      map[string]string
 		expected string
+		wantErr  string
 	}{
-		{
-			name:     "default image when no overrides",
-			spec:     dbpreview.DocumentDBSpec{},
-			expected: DEFAULT_GATEWAY_IMAGE,
-		},
 		{
 			name: "explicit image takes precedence over everything",
 			spec: dbpreview.DocumentDBSpec{
@@ -537,6 +562,31 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			expected: "custom-registry/custom-gateway:v1",
 		},
 		{
+			name: "DEFAULT_GATEWAY_IMAGE env var resolves gateway image",
+			spec: dbpreview.DocumentDBSpec{},
+			env: map[string]string{
+				DEFAULT_GATEWAY_IMAGE_ENV: "ghcr.io/example/gateway:9.9.9",
+			},
+			expected: "ghcr.io/example/gateway:9.9.9",
+		},
+		{
+			name: "DEFAULT_GATEWAY_IMAGE env var takes precedence over DOCUMENTDB_VERSION",
+			spec: dbpreview.DocumentDBSpec{},
+			env: map[string]string{
+				DEFAULT_GATEWAY_IMAGE_ENV: "ghcr.io/example/gateway:9.9.9",
+				DOCUMENTDB_VERSION_ENV:    "0.200.0",
+			},
+			expected: "ghcr.io/example/gateway:9.9.9",
+		},
+		{
+			name: "DOCUMENTDB_VERSION env var resolves gateway image",
+			spec: dbpreview.DocumentDBSpec{},
+			env: map[string]string{
+				DOCUMENTDB_VERSION_ENV: "0.200.0",
+			},
+			expected: GATEWAY_IMAGE_REPO + ":0.200.0",
+		},
+		{
 			name: "changestream image when feature gate is enabled",
 			spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
@@ -544,33 +594,46 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			expected: CHANGESTREAM_GATEWAY_IMAGE,
 		},
 		{
-			name: "default image when feature gate is explicitly disabled",
+			name: "missing configured default when feature gate is explicitly disabled returns error",
 			spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false},
 			},
-			expected: DEFAULT_GATEWAY_IMAGE,
+			wantErr: "no default gateway image configured",
+		},
+		{
+			name:    "missing configured default with no overrides returns error",
+			spec:    dbpreview.DocumentDBSpec{},
+			wantErr: "no default gateway image configured",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(DEFAULT_GATEWAY_IMAGE_ENV, "")
+			t.Setenv(DOCUMENTDB_VERSION_ENV, "")
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
+
 			db := &dbpreview.DocumentDB{Spec: tt.spec}
-			got := GetGatewayImageForDocumentDB(db)
+			got, err := GetGatewayImageForDocumentDB(db)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("expected error containing %q, got %q", tt.wantErr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("GetGatewayImageForDocumentDB() unexpected error: %v", err)
+			}
 			if got != tt.expected {
 				t.Errorf("GetGatewayImageForDocumentDB() = %q, want %q", got, tt.expected)
 			}
 		})
 	}
-
-	t.Run("DOCUMENTDB_VERSION env var resolves gateway image", func(t *testing.T) {
-		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
-		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
-		got := GetGatewayImageForDocumentDB(db)
-		expected := GATEWAY_IMAGE_REPO + ":0.200.0"
-		if got != expected {
-			t.Errorf("got %q, want %q", got, expected)
-		}
-	})
 }
 
 func TestGetEnvironmentSpecificAnnotations(t *testing.T) {

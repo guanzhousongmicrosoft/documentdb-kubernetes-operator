@@ -109,16 +109,16 @@ jobs:
 
     - name: Determine DocumentDB and Gateway image references
       run: |
-        # For local builds, use the locally built images; for external, read documentDbVersion from values.yaml.
+        # For local builds, use the locally built images; for external, read the explicit runtime default refs from values.yaml.
         # Database images use a separate version track from operator images.
         if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
           DOCDB_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
           GW_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
         else
-          DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
-          echo "Using documentDbVersion from values.yaml: $DOCDB_TAG"
-          DOCDB_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}"
-          GW_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}"
+          mapfile -t IMAGE_REFS < <(ruby -e 'require "yaml"; values = YAML.load_file("operator/documentdb-helm-chart/values.yaml"); %w[documentdb gateway].each do |name| artifact = values.dig("runtimeDefaults", name) || {}; ref = artifact["ref"].to_s; digest = artifact["digest"].to_s; puts(digest.empty? ? ref : "#{ref}@#{digest}"); end')
+          DOCDB_IMAGE="${IMAGE_REFS[0]}"
+          GW_IMAGE="${IMAGE_REFS[1]}"
+          echo "Using explicit runtime default refs from values.yaml"
         fi
         echo "DOCUMENTDB_IMAGE_REF=$DOCDB_IMAGE" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE_REF=$GW_IMAGE" >> $GITHUB_ENV

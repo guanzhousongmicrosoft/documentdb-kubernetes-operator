@@ -36,12 +36,14 @@ type DocumentDBSpec struct {
 
 	// DocumentDBImage is the container image to use for DocumentDB.
 	// Changing this is not recommended for most users.
-	// If not specified, defaults based on documentDBVersion or operator defaults.
+	// If not specified, the operator resolves it from documentDBVersion or its
+	// configured runtime defaults.
 	DocumentDBImage string `json:"documentDBImage,omitempty"`
 
 	// GatewayImage is the container image to use for the DocumentDB Gateway sidecar.
 	// Changing this is not recommended for most users.
-	// If not specified, defaults to a version that matches the DocumentDB operator version.
+	// If not specified, the operator resolves it from documentDBVersion or its
+	// configured runtime defaults.
 	GatewayImage string `json:"gatewayImage,omitempty"`
 
 	// PostgresImage is the container image to use for the PostgreSQL server.
@@ -116,7 +118,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.persistentVolume) && self.persistentVolume.name != ”)",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional

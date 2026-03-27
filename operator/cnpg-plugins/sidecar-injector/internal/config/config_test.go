@@ -33,12 +33,11 @@ func TestParsePullPolicy(t *testing.T) {
 }
 
 func TestApplyDefaults(t *testing.T) {
-	t.Run("sets default gateway image when empty", func(t *testing.T) {
+	t.Run("does not invent a gateway image when empty", func(t *testing.T) {
 		config := &Configuration{}
 		config.applyDefaults()
-		expected := "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0"
-		if config.GatewayImage != expected {
-			t.Errorf("expected %q, got %q", expected, config.GatewayImage)
+		if config.GatewayImage != "" {
+			t.Errorf("expected gateway image to remain empty, got %q", config.GatewayImage)
 		}
 	})
 
@@ -62,6 +61,7 @@ func TestApplyDefaults(t *testing.T) {
 func TestFromParameters(t *testing.T) {
 	t.Run("pull policy from parameters", func(t *testing.T) {
 		helper := &common.Plugin{Parameters: map[string]string{
+			"gatewayImage":           "ghcr.io/example/gateway:1.0",
 			"gatewayImagePullPolicy": "Never",
 		}}
 		config, errs := FromParameters(helper)
@@ -76,11 +76,27 @@ func TestFromParameters(t *testing.T) {
 	t.Run("defaults to IfNotPresent when not set", func(t *testing.T) {
 		helper := &common.Plugin{Parameters: map[string]string{}}
 		config, errs := FromParameters(helper)
-		if len(errs) != 0 {
-			t.Fatalf("unexpected validation errors: %v", errs)
+		if len(errs) != 1 {
+			t.Fatalf("expected one validation error, got %d: %v", len(errs), errs)
 		}
 		if config.GatewayImagePullPolicy != corev1.PullIfNotPresent {
 			t.Errorf("GatewayImagePullPolicy = %q, want IfNotPresent", config.GatewayImagePullPolicy)
+		}
+		if config.GatewayImage != "" {
+			t.Errorf("GatewayImage = %q, want empty", config.GatewayImage)
+		}
+	})
+
+	t.Run("requires gateway image parameter", func(t *testing.T) {
+		helper := &common.Plugin{Parameters: map[string]string{
+			"gatewayImagePullPolicy": "IfNotPresent",
+		}}
+		_, errs := FromParameters(helper)
+		if len(errs) != 1 {
+			t.Fatalf("expected one validation error, got %d: %v", len(errs), errs)
+		}
+		if errs[0] == nil {
+			t.Fatal("expected validation error entry, got nil")
 		}
 	})
 }

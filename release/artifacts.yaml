@@ -1,0 +1,32 @@
+# Canonical artifact inventory for the chart and the four active runtime images.
+# Until later phases migrate all consumers to this file directly, keep it in sync
+# with Chart.yaml, values.yaml, operator defaults, and sidecar defaults in the
+# same pull request that changes release defaults.
+schemaVersion: v1alpha1
+
+chart:
+  name: documentdb-operator
+  version: 0.2.0
+  appVersion: 0.2.0
+
+channels:
+  operatorTrack: 0.2.0
+  databaseTrack: 0.109.0
+
+images:
+  operator:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.2.0
+    digest: ""
+  sidecar:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0.2.0
+    digest: ""
+  documentdb:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0
+    digest: ""
+  gateway:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0
+    digest: ""
+
+postgres:
+  ref: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+  digest: ""

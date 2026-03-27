@@ -1,167 +1,229 @@
-# Release Instructions
+# Release process
 
-This document provides instructions for releasing a new version of the DocumentDB Kubernetes Operator.
+This is the maintainer runbook for releasing the DocumentDB Kubernetes Operator in the current manifest-driven model.
 
-For the complete release strategy, support policy, and versioning scheme, see [docs/designs/release-strategy.md](docs/designs/release-strategy.md).
+For release policy and versioning guidance, see [docs/designs/release-strategy.md](docs/designs/release-strategy.md).
 
----
+## Release model at a glance
 
-## Prerequisites
+The repository releases four runtime images:
 
-- Maintainer access to the repository
-- GitHub CLI (`gh`) installed and authenticated (for PR creation)
+- `operator`
+- `sidecar`
+- `documentdb`
+- `gateway`
 
----
+Maintainers should think in terms of one release interface and one source of truth:
 
-## Release Types
+- **Single release entrypoint:** `.github/workflows/release.yml`
+- **Single canonical manifest:** `release/artifacts.yaml`
+
+The build and promotion mechanics are still split internally by track, but the maintainer-facing flow is unified.
+
+### Tracks and scopes
+
+| Scope | What it releases | Typical use |
+| --- | --- | --- |
+| `operator` | `operator`, `sidecar`, and the Helm chart | Operator-only release |
+| `database` | `documentdb` and `gateway` | Database image refresh without a new operator release |
+| `full` | All four images plus the Helm chart | Coordinated release across both tracks |
+
+## What you choose manually
+
+For a normal release, choose the minimum set of inputs:
+
+| Decision | Required when | Notes |
+| --- | --- | --- |
+| `scope` | Always | `operator`, `database`, or `full` |
+| `operator_candidate_version` | `operator` or `full` | Candidate tag produced by `build_operator_images.yml` |
+| `operator_version` | `operator` or `full` | Final operator release version |
+| `database_candidate_version` | `database` or `full` | Candidate tag produced by `build_documentdb_images.yml` |
+| `database_version` | `database` or `full` | Final database release version |
+| `source_ref` | `operator` or `full` | Git ref used to package the Helm chart; prefer a tag or commit |
+| `run_tests` | `operator` or `full` | Defaults to `true`; leave enabled unless you have an explicit exception |
+
+### Manual work that is still expected
+
+- Decide the release versions and `source_ref`.
+- Trigger the candidate build workflow(s).
+- Review the generated candidate bundle artifact(s).
+- Start `release.yml`.
+- Review and merge the auto-generated metadata PR.
+
+### What not to do during a normal release
+
+- Do **not** use `documentDbVersion` as the release mechanism.
+- Do **not** manually edit `values.yaml` to point at released database images.
+- Do **not** manually keep `Chart.yaml`, `values.yaml`, workflow defaults, and image refs in sync by hand.
+- Do **not** treat the split track workflows as separate release systems unless you intentionally need an advanced path.
+
+`documentDbVersion` remains only as a temporary compatibility shim. The normal release path is explicit image refs and digests synchronized from `release/artifacts.yaml`.
+
+## Standard release flow
+
+### 1. Prepare the release PR
+
+If you use the release agent, it prepares the version bump PR for you:
 
 | Type | Command | Example |
-|------|---------|---------|
-| Patch Release | `@release-agent cut a release` | `0.1.3` → `0.1.4` |
-| Minor Release | `@release-agent cut a minor release` | `0.1.3` → `0.2.0` |
-| Major Release | `@release-agent cut a major release` | `0.1.3` → `1.0.0` |
-| Specific Version | `@release-agent release X.Y.Z` | `release 1.0.0` |
+| --- | --- | --- |
+| Patch release | `@release-agent cut a release` | `0.1.3` -> `0.1.4` |
+| Minor release | `@release-agent cut a minor release` | `0.1.3` -> `0.2.0` |
+| Major release | `@release-agent cut a major release` | `0.1.3` -> `1.0.0` |
+| Specific version | `@release-agent release X.Y.Z` | `release 1.0.0` |
 
----
-
-## Automated Release Process
-
-This project uses a **release agent** to automate release preparation. The agent handles:
-
-1. Reading current version from `operator/documentdb-helm-chart/Chart.yaml`
-2. Bumping version numbers
-3. Generating changelog entries from git commits
-4. Creating the release PR
-
-### Step 1: Invoke the Release Agent
-
-```
-@release-agent cut a release
-```
-
-Or for specific version types:
-```
-@release-agent cut a minor release
-@release-agent release 0.2.0
-```
-
-### Step 2: Review Changes
-
-The agent will update:
+The release agent updates:
 
 | File | Updates |
-|------|---------|
+| --- | --- |
 | `operator/documentdb-helm-chart/Chart.yaml` | `version` and `appVersion` |
-| `CHANGELOG.md` | New version entry at top |
+| `CHANGELOG.md` | New release entry |
 
-> **Note:** The agent does NOT modify `values.yaml` - the CI workflow handles image tag updates during release.
+Then create the PR:
 
-### Step 3: Create PR
-
-After reviewing the changes:
-```
+```text
 @release-agent create PR
 ```
 
-This creates a branch `release/v{version}` and opens a PR.
+If the agent is unavailable, update `Chart.yaml` and `CHANGELOG.md` manually, open the release PR yourself, and then continue with the same promotion flow below.
 
-### Step 4: Merge and Trigger Release Workflows
+> The release PR is not the place to hand-edit `release/artifacts.yaml` for final promoted refs. The release workflows sync release-controlled metadata during promotion.
 
-After the PR is approved and merged:
+### 2. Merge the release PR
 
-#### Operator Release (operator + sidecar images + Helm chart)
+After the release PR is approved and merged, use the workflow sequence below.
 
-1. Run **"RELEASE - Build Operator Candidate Images"** (`build_operator_images.yml`) with the operator version
-2. Run **"RELEASE - Promote Operator Images and Publish Helm Chart"** (`release_operator.yml`) to promote and publish
+### 3. Build candidate artifacts
 
-#### Database Image Release (documentdb extension + gateway)
+Run only the candidate build workflows needed for the selected scope:
 
-Database images follow an **independent release cycle** from the operator:
+| Needed scope | Workflow |
+| --- | --- |
+| `operator`, `full` | `RELEASE - Build Operator Candidate Images` (`.github/workflows/build_operator_images.yml`) |
+| `database`, `full` | `RELEASE - Build DocumentDB Candidate Images` (`.github/workflows/build_documentdb_images.yml`) |
 
-1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the released DocumentDB `version`
-2. Run **"RELEASE - Promote DocumentDB Images"** (`release_documentdb_images.yml`) to promote and auto-create a PR that bumps default image versions across the codebase
+Expected artifacts:
 
-> **Note:** The deprecated combined workflows (`build_images.yml`, `release_images.yml`) are still available but will be removed in a future release.
+- `operator-candidate-bundle`
+- `database-candidate-bundle`
 
----
+Use these artifacts to confirm the candidate tags, refs, and digests you are about to promote.
 
-## Manual Release (If Agent Unavailable)
+### 4. Run the top-level release orchestrator
 
-If the release agent is unavailable, follow these manual steps:
+Start `RELEASE - Orchestrate Artifact Release` (`.github/workflows/release.yml`).
 
-### 1. Update Chart.yaml
+This is the default maintainer entrypoint.
 
-Edit `operator/documentdb-helm-chart/Chart.yaml`:
-```yaml
-version: X.Y.Z
-appVersion: "X.Y.Z"
-```
+#### Scope behavior
 
-### 2. Update Changelog
+- **`scope=operator`**
+  - Calls `release_operator.yml`
+  - Promotes `operator` and `sidecar`
+  - Publishes the Helm chart
+  - Creates the metadata PR from the operator-track workflow
 
-Add entry to top of `CHANGELOG.md`:
-```markdown
-## [X.Y.Z] - YYYY-MM-DD
+- **`scope=database`**
+  - Calls `release_documentdb_images.yml`
+  - Promotes `documentdb` and `gateway`
+  - Creates the metadata PR from the database-track workflow
 
-### Major Features
-- Feature descriptions
+- **`scope=full`**
+  - Runs the database release first
+  - Runs the operator release second, packaging the chart with the selected database defaults
+  - Creates one consolidated metadata PR from `release.yml`
 
-### Bug Fixes
-- Fix descriptions
+### 5. Let automation validate and promote
 
-### Enhancements & Fixes
-- Other changes
-```
+Automation owns the mechanical parts of the release:
 
-### 3. Create PR
+1. Builds multi-architecture candidate images.
+2. Signs and verifies candidate image manifests.
+3. Produces machine-readable candidate bundle artifacts.
+4. Validates workflow inputs for the selected scope.
+5. Retags candidate images to release tags.
+6. Runs operator-track pre-release tests when `run_tests=true`.
+7. Packages and publishes the Helm chart for operator releases.
+8. Resolves promoted image digests.
+9. Synchronizes repository metadata from `release/artifacts.yaml`.
+10. Opens the metadata PR when repository files changed.
 
-```bash
-git checkout -b release/vX.Y.Z
-git add operator/documentdb-helm-chart/Chart.yaml CHANGELOG.md
-git commit -m "chore: prepare release X.Y.Z"
-git push origin release/vX.Y.Z
-gh pr create --title "chore: release vX.Y.Z" --base main
-```
+During promotion, the sync step updates release-controlled files for you. Depending on scope, that includes:
 
-### 4. Trigger Release Workflows
+- `release/artifacts.yaml`
+- `operator/documentdb-helm-chart/Chart.yaml`
+- `operator/documentdb-helm-chart/values.yaml`
+- workflow defaults that track released versions
+- upgrade baseline references used by release validation workflows
+- the public gateway Dockerfile source-image default for the database track
 
-After merge, trigger the release workflows as described above.
+### 6. Review the metadata PR
 
----
+After promotion, review the auto-generated PR.
 
+Verify that:
 
-## Security Release Process
+- versions match the release you intended
+- `release/artifacts.yaml` contains the correct refs and digests
+- Helm chart metadata and default image refs are synchronized
+- workflow defaults moved to the expected released values
 
-For security vulnerabilities:
+For `scope=full`, expect one PR that combines both tracks. For single-track releases, expect the track workflow to open the PR.
 
-1. **Do not** disclose details publicly until fix is released
-2. Create fix on a private branch
-3. Follow release process
-4. Publish security advisory on GitHub after release
-5. Request CVE if applicable
+### 7. Merge the metadata PR
 
----
+Merge the PR after review. That merge becomes the repository record of the released artifact set.
 
-## Rollback Procedure
+## Workflow order
+
+Use this order unless you intentionally need an advanced exception path:
+
+1. Prepare and merge the release PR
+2. Run `build_operator_images.yml` and/or `build_documentdb_images.yml`
+3. Review candidate bundle artifact(s)
+4. Run `release.yml`
+5. Review the generated metadata PR
+6. Merge the metadata PR
+
+## Advanced path: direct track workflows
+
+Use the track-specific release workflows directly only when you intentionally want that behavior:
+
+- `.github/workflows/release_operator.yml`
+- `.github/workflows/release_documentdb_images.yml`
+
+They remain part of the implementation, but they are not the primary maintainer interface anymore. In normal operation, use `release.yml`.
+
+## Rollback and audit
+
+Treat `release/artifacts.yaml` as the rollback and audit anchor.
 
 If a release has critical issues:
 
-1. Immediately start work on a patch release
-2. Consider yanking problematic container images
-3. Update GitHub release to mark as problematic
-4. Communicate in GitHub Discussions
+1. Start a patch release immediately.
+2. Consider yanking problematic container images if appropriate.
+3. Mark the GitHub release as problematic.
+4. Communicate in GitHub Discussions or the usual maintainer channel.
+5. Use the previous merged release-metadata PR and its `release/artifacts.yaml` snapshot as the source of truth for refs and digests.
 
----
+## Security releases
+
+For security vulnerabilities:
+
+1. Do not disclose details publicly until the fix is released.
+2. Create the fix on a private branch or through the private security process.
+3. Follow the same promotion flow in this document.
+4. Publish the security advisory after release.
+5. Request a CVE if applicable.
 
 ## Troubleshooting
 
-### Release Agent Errors
+### Release agent validation errors
 
-If the agent reports version validation errors:
-- Ensure new version is greater than current version
-- Use semantic versioning format: `X.Y.Z`
+- Ensure the new version is greater than the current version.
+- Use semantic versioning: `X.Y.Z`.
 
-### CI Failures on Release Branch
+### CI failures on a release branch
 
 ```bash
 cd operator/src
@@ -169,7 +231,7 @@ go mod tidy
 make manifests generate
 ```
 
-### Helm Chart Issues
+### Helm chart issues
 
 ```bash
 cd operator/documentdb-helm-chart
@@ -177,10 +239,19 @@ helm lint .
 helm template . --debug
 ```
 
----
+## Current verification status
+
+This release model was remotely verified successfully on branch `copilot/release-flow-verification-20260327-1526` at commit `8b15aea1e1aa014dd79cad70c8606e9a7b1a7f70`.
+
+Verified workflows:
+
+- backup and restore
+- upgrade and rollback
+
+That verification confirms the explicit-runtime, manifest-driven release path described in this runbook.
 
 ## Reference
 
-- [Release Agent](.github/agents/release-agent.md) - Agent configuration
-- [Release Strategy](docs/designs/release-strategy.md) - Complete release policy
-- [CHANGELOG.md](CHANGELOG.md) - Version history
+- [Release Agent](.github/agents/release-agent.md)
+- [Release Strategy](docs/designs/release-strategy.md)
+- [CHANGELOG.md](CHANGELOG.md)

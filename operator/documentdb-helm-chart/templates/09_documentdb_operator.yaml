@@ -18,13 +18,24 @@ spec:
         app: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- $operatorImage := include "documentdb-chart.renderImage" (dict "ref" .Values.image.documentdbk8soperator.ref "digest" .Values.image.documentdbk8soperator.digest "repository" .Values.image.documentdbk8soperator.repository "tag" .Values.image.documentdbk8soperator.tag "defaultTag" .Chart.AppVersion) }}
+      {{- $defaultDocumentDBImage := include "documentdb-chart.runtimeDefaultImage" (dict "ref" .Values.runtimeDefaults.documentdb.ref "digest" .Values.runtimeDefaults.documentdb.digest "repository" "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb" "legacyVersion" .Values.documentDbVersion) }}
+      {{- $defaultGatewayImage := include "documentdb-chart.runtimeDefaultImage" (dict "ref" .Values.runtimeDefaults.gateway.ref "digest" .Values.runtimeDefaults.gateway.digest "repository" "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway" "legacyVersion" .Values.documentDbVersion) }}
       containers:
       - name: documentdb-operator
-        image: "{{ .Values.image.documentdbk8soperator.repository }}:{{ .Values.image.documentdbk8soperator.tag | default .Chart.AppVersion }}"
+        image: "{{ $operatorImage }}"
         imagePullPolicy: "{{ .Values.image.documentdbk8soperator.pullPolicy }}"
         env:
         - name: GATEWAY_PORT
           value: "10260"
+        {{- if $defaultDocumentDBImage }}
+        - name: DEFAULT_DOCUMENTDB_IMAGE
+          value: "{{ $defaultDocumentDBImage }}"
+        {{- end }}
+        {{- if $defaultGatewayImage }}
+        - name: DEFAULT_GATEWAY_IMAGE
+          value: "{{ $defaultGatewayImage }}"
+        {{- end }}
         {{- if .Values.documentDbVersion }}
         - name: DOCUMENTDB_VERSION
           value: "{{ .Values.documentDbVersion }}"

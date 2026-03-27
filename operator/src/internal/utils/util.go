@@ -428,56 +428,75 @@ func GenerateConnectionString(documentdb *dbpreview.DocumentDB, serviceIp string
 }
 
 // GetGatewayImageForDocumentDB returns the gateway image for a DocumentDB instance.
-// Priority: spec.gatewayImage > spec.documentDBVersion > env.DOCUMENTDB_VERSION > default
-func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
+// Priority: spec.gatewayImage > spec.documentDBVersion > env.DEFAULT_GATEWAY_IMAGE >
+// env.DOCUMENTDB_VERSION > ChangeStreams override > configuration error.
+func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) (string, error) {
 	if documentdb.Spec.GatewayImage != "" {
-		return documentdb.Spec.GatewayImage
+		return documentdb.Spec.GatewayImage, nil
 	}
 
 	// Use spec-level documentDBVersion if set
 	if documentdb.Spec.DocumentDBVersion != "" {
-		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, documentdb.Spec.DocumentDBVersion), nil
 	}
 
-	// Use global documentDbVersion if set
-	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, version)
+	// Use explicit chart-configured default image if set.
+	if imageRef := strings.TrimSpace(os.Getenv(DEFAULT_GATEWAY_IMAGE_ENV)); imageRef != "" {
+		return imageRef, nil
+	}
+
+	// Deprecated compatibility path: use global documentDbVersion if set.
+	if version := strings.TrimSpace(os.Getenv(DOCUMENTDB_VERSION_ENV)); version != "" {
+		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, version), nil
 	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.
 	// TODO: remove this override once change stream support is included in the official images.
 	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
-		return CHANGESTREAM_GATEWAY_IMAGE
+		return CHANGESTREAM_GATEWAY_IMAGE, nil
 	}
 
-	// Fall back to default
-	return DEFAULT_GATEWAY_IMAGE
+	return "", fmt.Errorf(
+		"no default gateway image configured; set %s or %s",
+		DEFAULT_GATEWAY_IMAGE_ENV,
+		DOCUMENTDB_VERSION_ENV,
+	)
 }
 
 // GetDocumentDBImageForInstance returns the documentdb engine image.
-// Priority: spec.documentDBImage > spec.documentDBVersion > env.DOCUMENTDB_VERSION > default
-func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
+// Priority: spec.documentDBImage > spec.documentDBVersion > env.DEFAULT_DOCUMENTDB_IMAGE >
+// env.DOCUMENTDB_VERSION > ChangeStreams override > configuration error.
+func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) (string, error) {
 	if documentdb.Spec.DocumentDBImage != "" {
-		return documentdb.Spec.DocumentDBImage
+		return documentdb.Spec.DocumentDBImage, nil
 	}
 
 	// Use spec-level documentDBVersion if set
 	if documentdb.Spec.DocumentDBVersion != "" {
-		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, documentdb.Spec.DocumentDBVersion), nil
 	}
 
-	// Use global documentDbVersion if set (from DOCUMENTDB_VERSION env var)
-	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, version)
+	// Use explicit chart-configured default image if set.
+	if imageRef := strings.TrimSpace(os.Getenv(DEFAULT_DOCUMENTDB_IMAGE_ENV)); imageRef != "" {
+		return imageRef, nil
+	}
+
+	// Deprecated compatibility path: use global documentDbVersion if set.
+	if version := strings.TrimSpace(os.Getenv(DOCUMENTDB_VERSION_ENV)); version != "" {
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, version), nil
 	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.
 	// TODO: remove this override once change stream support is included in the official images.
 	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
-		return CHANGESTREAM_DOCUMENTDB_IMAGE
+		return CHANGESTREAM_DOCUMENTDB_IMAGE, nil
 	}
 
-	return DEFAULT_DOCUMENTDB_IMAGE
+	return "", fmt.Errorf(
+		"no default documentdb image configured; set %s or %s",
+		DEFAULT_DOCUMENTDB_IMAGE_ENV,
+		DOCUMENTDB_VERSION_ENV,
+	)
 }
 
 func GenerateServiceName(source, target, resourceGroup string) string {

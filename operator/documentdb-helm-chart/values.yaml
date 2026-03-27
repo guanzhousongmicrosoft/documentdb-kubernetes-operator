@@ -1,11 +1,9 @@
 namespace: documentdb-operator
 replicaCount: 1
 
-# DocumentDB database image version (extension + gateway images).
-# This controls the DOCUMENTDB_VERSION env var passed to the operator and sidecar,
-# which determines the default documentdb extension and gateway image tags at runtime.
-# This version is INDEPENDENT of Chart.appVersion (which controls operator/sidecar image tags).
-# When empty, the operator falls back to its compiled-in defaults (see constants.go).
+# Deprecated compatibility field.
+# Prefer runtimeDefaults.documentdb.ref and runtimeDefaults.gateway.ref instead.
+# When set, the chart still passes DOCUMENTDB_VERSION for one-release compatibility.
 documentDbVersion: "0.109.0"
 
 # Gateway image pull policy for the gateway sidecar container.
@@ -29,14 +27,42 @@ walReplica: false  # Set to true to deploy the WAL replica plugin
 
 image:
   documentdbk8soperator:
+    # Default released operator image reference, synchronized from release/artifacts.yaml.
+    # When cleared, Helm falls back to repository + Chart.appVersion for compatibility.
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.2.0
+    digest: ""
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/operator
     pullPolicy: Always
   sidecarinjector:
+    # Default released sidecar image reference, synchronized from release/artifacts.yaml.
+    # When cleared, Helm falls back to repository + Chart.appVersion for compatibility.
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0.2.0
+    digest: ""
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar
     pullPolicy: Always
   walreplica:
+    # Optional explicit image reference for the WAL replica deployment.
+    # When empty, Helm uses repository + Chart.appVersion.
+    ref: ""
+    digest: ""
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: Always
+
+runtimeDefaults:
+  # Explicit default image references passed to the operator for DocumentDB runtime components.
+  # These defaults are used when a DocumentDB CR does not set spec.documentDBImage or spec.gatewayImage.
+  documentdb:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.109.0
+    digest: ""
+  gateway:
+    ref: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0
+    digest: ""
+  # Reserved for a later phase that moves Postgres defaulting from CRD/schema defaults
+  # to explicit chart/operator configuration.
+  postgres:
+    ref: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+    digest: ""
+
 cloudnative-pg:
   namespaceOverride: cnpg-system
   additionalEnv:

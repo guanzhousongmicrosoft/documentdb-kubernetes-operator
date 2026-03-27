@@ -38,6 +38,7 @@ spec:
       labels:
         app: sidecar-injector
     spec:
+      {{- $sidecarImage := include "documentdb-chart.renderImage" (dict "ref" .Values.image.sidecarinjector.ref "digest" .Values.image.sidecarinjector.digest "repository" .Values.image.sidecarinjector.repository "tag" .Values.image.sidecarinjector.tag "defaultTag" .Chart.AppVersion) }}
       containers:
       - args:
         - plugin
@@ -45,14 +46,9 @@ spec:
         - --server-key=/server/tls.key
         - --client-cert=/client/tls.crt
         - --server-address=:9090
-        image: "{{ .Values.image.sidecarinjector.repository }}:{{ .Values.image.sidecarinjector.tag | default .Chart.AppVersion }}"
+        image: "{{ $sidecarImage }}"
         imagePullPolicy: "{{ .Values.image.sidecarinjector.pullPolicy }}"
         name: cnpg-i-sidecar-injector
-        env:
-        {{- if .Values.documentDbVersion }}
-        - name: DOCUMENTDB_VERSION
-          value: "{{ .Values.documentDbVersion }}"
-        {{- end }}
         ports:
         - containerPort: 9090
           protocol: TCP

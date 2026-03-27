@@ -152,10 +152,19 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// create the CNPG Cluster
-	documentdbImage := util.GetDocumentDBImageForInstance(documentdb)
+	documentdbImage, err := util.GetDocumentDBImageForInstance(documentdb)
+	if err != nil {
+		logger.Error(err, "Failed to resolve DocumentDB image")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+	gatewayImage, err := util.GetGatewayImageForDocumentDB(documentdb)
+	if err != nil {
+		logger.Error(err, "Failed to resolve gateway image")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
 
 	currentCnpgCluster := &cnpgv1.Cluster{}
-	desiredCnpgCluster := cnpg.GetCnpgClusterSpec(req, documentdb, documentdbImage, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
+	desiredCnpgCluster := cnpg.GetCnpgClusterSpec(req, documentdb, documentdbImage, gatewayImage, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
 
 	if replicationContext.IsReplicating() {
 		err = r.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, desiredCnpgCluster)

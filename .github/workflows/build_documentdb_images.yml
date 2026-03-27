@@ -3,7 +3,8 @@ name: RELEASE - Build DocumentDB Candidate Images
 # Builds documentdb extension and gateway images from public DocumentDB release artifacts.
 # - documentdb image: public deb13 PostgreSQL 18 extension package
 # - gateway image: public documentdb-local image payload
-# These images follow the DATABASE version track (documentDbVersion in values.yaml).
+# These images follow the DATABASE version track recorded in release/artifacts.yaml
+# and synchronized into chart runtime defaults.
 # For operator/sidecar images, see build_operator_images.yml.
 
 on:
@@ -13,6 +14,15 @@ on:
         description: 'Released DocumentDB version to package (for example 0.109.0)'
         required: false
         default: '0.109.0'
+        type: string
+
+  workflow_call:
+    inputs:
+      version:
+        description: 'Released DocumentDB version to package (for example 0.109.0)'
+        required: false
+        default: '0.109.0'
+        type: string
 
   repository_dispatch:
     types: [documentdb-release]
@@ -40,50 +50,50 @@ jobs:
       image_tag: ${{ steps.version.outputs.image_tag }}
       gateway_source_image: ${{ steps.version.outputs.gateway_source_image }}
     steps:
-    - name: Resolve released DocumentDB version
-      id: version
-      run: |
-        set -euo pipefail
-        RAW_VERSION="${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
-        if [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
-          VERSION="${RAW_VERSION/-/.}"
-        else
-          VERSION="$RAW_VERSION"
-        fi
-        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Version must use dotted semver format (for example 0.109.0), got: $RAW_VERSION" >&2
-          exit 1
-        fi
-        VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
-        SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-        IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
-        GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:pg17-${VERSION}"
-        echo "documentdb_version=$VERSION" >> $GITHUB_OUTPUT
-        echo "documentdb_version_dash=$VERSION_DASH" >> $GITHUB_OUTPUT
-        echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "gateway_source_image=$GATEWAY_SOURCE_IMAGE" >> $GITHUB_OUTPUT
-        echo "DocumentDB version: $VERSION"
-        echo "Release tag: v$VERSION_DASH"
-        echo "Candidate image tag: $IMAGE_TAG"
-        echo "Gateway source image: $GATEWAY_SOURCE_IMAGE"
+      - name: Resolve released DocumentDB version
+        id: version
+        run: |
+          set -euo pipefail
+          RAW_VERSION="${{ inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
+          if [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            VERSION="${RAW_VERSION/-/.}"
+          else
+            VERSION="$RAW_VERSION"
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must use dotted semver format (for example 0.109.0), got: $RAW_VERSION" >&2
+            exit 1
+          fi
+          VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
+          GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:pg17-${VERSION}"
+          echo "documentdb_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "documentdb_version_dash=$VERSION_DASH" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "gateway_source_image=$GATEWAY_SOURCE_IMAGE" >> $GITHUB_OUTPUT
+          echo "DocumentDB version: $VERSION"
+          echo "Release tag: v$VERSION_DASH"
+          echo "Candidate image tag: $IMAGE_TAG"
+          echo "Gateway source image: $GATEWAY_SOURCE_IMAGE"
 
-    - name: Verify public extension release assets
-      env:
-        VERSION_DASH: ${{ steps.version.outputs.documentdb_version_dash }}
-      run: |
-        set -euo pipefail
-        for ARCH in amd64 arm64; do
-          ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${VERSION_DASH}/deb13-postgresql-18-documentdb_${VERSION_DASH}_${ARCH}.deb"
-          echo "Checking $ASSET_URL"
-          curl -fsI -L "$ASSET_URL" >/dev/null
-        done
+      - name: Verify public extension release assets
+        env:
+          VERSION_DASH: ${{ steps.version.outputs.documentdb_version_dash }}
+        run: |
+          set -euo pipefail
+          for ARCH in amd64 arm64; do
+            ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${VERSION_DASH}/deb13-postgresql-18-documentdb_${VERSION_DASH}_${ARCH}.deb"
+            echo "Checking $ASSET_URL"
+            curl -fsI -L "$ASSET_URL" >/dev/null
+          done
 
-    - name: Verify public gateway source image
-      env:
-        SOURCE_IMAGE: ${{ steps.version.outputs.gateway_source_image }}
-      run: |
-        set -euo pipefail
-        docker manifest inspect "$SOURCE_IMAGE" >/dev/null
+      - name: Verify public gateway source image
+        env:
+          SOURCE_IMAGE: ${{ steps.version.outputs.gateway_source_image }}
+        run: |
+          set -euo pipefail
+          docker manifest inspect "$SOURCE_IMAGE" >/dev/null
 
   # ---------------------------------------------------------------------------
   # Build and push documentdb + gateway images (per-arch)
@@ -108,46 +118,46 @@ jobs:
     env:
       IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Download public extension package
-      if: matrix.image.name == 'documentdb'
-      run: |
-        set -euo pipefail
-        mkdir -p packages
-        DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
-        ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/${DEB_FILE}"
-        curl -fsSL -o "packages/${DEB_FILE}" -L "$ASSET_URL"
-        ls -lh packages/
+      - name: Download public extension package
+        if: matrix.image.name == 'documentdb'
+        run: |
+          set -euo pipefail
+          mkdir -p packages
+          DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
+          ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/${DEB_FILE}"
+          curl -fsSL -o "packages/${DEB_FILE}" -L "$ASSET_URL"
+          ls -lh packages/
 
-    - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-    - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
-      run: |
-        set -euo pipefail
-        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
-        IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
+      - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+        run: |
+          set -euo pipefail
+          TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+          IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
 
-        BUILD_ARGS=""
+          BUILD_ARGS=""
 
-        case "${{ matrix.image.name }}" in
-          documentdb)
-            DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
-            echo "Using deb: $DEB_FILE"
-            BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
-            ;;
-          gateway)
-            echo "Using public gateway source image: ${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
-            BUILD_ARGS="--build-arg SOURCE_IMAGE=${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
-            ;;
-        esac
+          case "${{ matrix.image.name }}" in
+            documentdb)
+              DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
+              echo "Using deb: $DEB_FILE"
+              BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
+              ;;
+            gateway)
+              echo "Using public gateway source image: ${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
+              BUILD_ARGS="--build-arg SOURCE_IMAGE=${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
+              ;;
+          esac
 
-        docker build --pull $BUILD_ARGS \
-          -t $IMAGE \
-          -f ${{ matrix.image.dockerfile }} .
-        docker push $IMAGE
+          docker build --pull $BUILD_ARGS \
+            -t $IMAGE \
+            -f ${{ matrix.image.dockerfile }} .
+          docker push $IMAGE
 
   # ---------------------------------------------------------------------------
   # Create multi-arch manifests, sign, and verify
@@ -162,34 +172,34 @@ jobs:
     env:
       IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
     steps:
-    - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-    - name: Create and Push Manifest
-      run: |
-        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
-        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+      - name: Create and Push Manifest
+        run: |
+          docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+            --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
+            --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
+          docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
 
-    - name: Install cosign
-      uses: sigstore/cosign-installer@v3.8.2
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.2
 
-    - name: Sign manifest (keyless)
-      run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          | awk '/^Digest:/ { print $2 }')
-        echo "Signing manifest-list@${DIGEST}"
-        cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
+      - name: Sign manifest (keyless)
+        run: |
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+            | awk '/^Digest:/ { print $2 }')
+          echo "Signing manifest-list@${DIGEST}"
+          cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
 
-    - name: Verify manifest signature (keyless)
-      run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          | awk '/^Digest:/ { print $2 }')
-        cosign verify \
-          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
-          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-          ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
+      - name: Verify manifest signature (keyless)
+        run: |
+          DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+            | awk '/^Digest:/ { print $2 }')
+          cosign verify \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
 
   # ---------------------------------------------------------------------------
   # Summary
@@ -198,18 +208,52 @@ jobs:
     name: Build Summary
     runs-on: ubuntu-22.04
     needs: [resolve-public-artifacts, create-manifest]
-    if: always()
+    if: always() && needs.create-manifest.result == 'success'
     steps:
-    - name: Summary
-      run: |
-        echo "## DocumentDB Image Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **DocumentDB Version**: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Candidate Image Tag**: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Extension Package Source**: \`https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_{amd64,arm64}.deb\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Gateway Source Image**: \`${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Images**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "To release these images, run \`release_documentdb_images.yml\` with:" >> $GITHUB_STEP_SUMMARY
-        echo "- candidate_version: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- version: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: operator/src/go.mod
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Generate candidate bundle
+        run: |
+          DOCUMENTDB_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/documentdb:${{ needs.resolve-public-artifacts.outputs.image_tag }} \
+            | awk '/^Digest:/ { print $2 }')
+          GATEWAY_DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/gateway:${{ needs.resolve-public-artifacts.outputs.image_tag }} \
+            | awk '/^Digest:/ { print $2 }')
+          cd operator/src
+          go run ./cmd/release-manifest bundle \
+            --manifest ../../release/artifacts.yaml \
+            --scope database \
+            --source-ref "${{ github.sha }}" \
+            --candidate-documentdb-ref "ghcr.io/${{ github.repository }}/documentdb:${{ needs.resolve-public-artifacts.outputs.image_tag }}" \
+            --candidate-documentdb-digest "$DOCUMENTDB_DIGEST" \
+            --candidate-gateway-ref "ghcr.io/${{ github.repository }}/gateway:${{ needs.resolve-public-artifacts.outputs.image_tag }}" \
+            --candidate-gateway-digest "$GATEWAY_DIGEST" \
+            --output ../../database-candidate-bundle.json
+
+      - name: Upload candidate bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-candidate-bundle
+          path: database-candidate-bundle.json
+          retention-days: 7
+
+      - name: Summary
+        run: |
+          echo "## DocumentDB Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **DocumentDB Version**: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Candidate Image Tag**: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Extension Package Source**: \`https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_{amd64,arm64}.deb\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Gateway Source Image**: \`${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
+          echo "- **Candidate Bundle Artifact**: \`database-candidate-bundle\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To release these images, run \`release.yml\` with scope=\`database\` (preferred) or \`release_documentdb_images.yml\` directly." >> $GITHUB_STEP_SUMMARY
