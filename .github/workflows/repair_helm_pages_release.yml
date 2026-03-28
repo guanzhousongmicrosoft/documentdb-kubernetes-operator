@@ -89,6 +89,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: "pages"
@@ -98,6 +100,8 @@ jobs:
   repair-published-chart:
     name: Repair Published Helm Chart
     runs-on: ubuntu-latest
+    outputs:
+      pages_build_type: ${{ steps.pages-config.outputs.build_type }}
     env:
       CHART_DIR: operator/documentdb-helm-chart
 
@@ -127,9 +131,11 @@ jobs:
               repo: context.repo.repo,
             });
             const source = result.data.source || {};
+            core.setOutput('build_type', result.data.build_type || '');
             core.setOutput('branch', source.branch || '');
             core.setOutput('path', source.path || '');
             core.info(`GitHub Pages source: ${source.branch || '(unset)'}${source.path || ''}`);
+            core.info(`GitHub Pages build type: ${result.data.build_type || '(unset)'}`);
 
       - name: Require explicit override for publish branch mismatch
         if: ${{ !inputs.dry_run && !inputs.allow_pages_source_mismatch }}
@@ -294,6 +300,7 @@ jobs:
           REPO_URL: ${{ inputs.repo_url }}
           DRY_RUN: ${{ inputs.dry_run }}
           NORMALIZE_CHART_METADATA: ${{ inputs.normalize_chart_metadata }}
+          PAGES_BUILD_TYPE: ${{ steps.pages-config.outputs.build_type }}
           PAGES_SOURCE_BRANCH: ${{ steps.pages-config.outputs.branch }}
           PAGES_SOURCE_PATH: ${{ steps.pages-config.outputs.path }}
         run: |
@@ -305,6 +312,7 @@ jobs:
             echo "- Release ref: \`${RELEASE_REF}\`"
             echo "- Publish branch: \`${PUBLISH_BRANCH}\`"
             echo "- GitHub Pages source: \`${PAGES_SOURCE_BRANCH}${PAGES_SOURCE_PATH}\`"
+            echo "- GitHub Pages build type: \`${PAGES_BUILD_TYPE}\`"
             echo "- Repo URL: \`${REPO_URL}\`"
             echo "- Dry run: \`${DRY_RUN}\`"
             echo "- Normalize chart metadata: \`${NORMALIZE_CHART_METADATA}\`"
@@ -346,3 +354,25 @@ jobs:
           fi
           git commit -m "fix: republish released Helm charts from live index and tagged source"
           git push origin "HEAD:${PUBLISH_BRANCH}"
+
+      - name: Upload GitHub Pages artifact
+        if: ${{ !inputs.dry_run && steps.pages-config.outputs.build_type == 'workflow' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+  deploy-pages-site:
+    name: Deploy GitHub Pages
+    runs-on: ubuntu-latest
+    needs: repair-published-chart
+    if: ${{ !inputs.dry_run && needs.repair-published-chart.result == 'success' && needs.repair-published-chart.outputs.pages_build_type == 'workflow' }}
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -236,6 +236,8 @@ jobs:
     if: ${{ always() && needs.publish-helm-chart.result == 'success' }}
     permissions:
       contents: write
+      pages: write
+      id-token: write
     uses: ./.github/workflows/repair_helm_pages_release.yml
     with:
       version: ${{ inputs.version }}
