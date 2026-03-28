@@ -3,20 +3,20 @@ entries:
   documentdb-operator:
   - apiVersion: v2
     appVersion: 0.2.0
-    created: "2026-03-28T02:45:22.109378862Z"
+    created: "2026-03-28T02:55:47.927058469Z"
     dependencies:
     - name: cloudnative-pg
       repository: https://cloudnative-pg.github.io/charts/
       version: 0.27.0
     description: A Helm chart for deploying the DocumentDB operator
-    digest: efac6b9159c798464dd7e681813fd1b8a87afa1286ca2c66c0ce4b3d199f85b5
+    digest: cd90f21808318fa4c52f2b669009e8da9cdbb9aae6f3c6624d97eae9c55cb8d0
     name: documentdb-operator
     urls:
     - https://guanzhousongmicrosoft.github.io/documentdb-kubernetes-operator/documentdb-operator-0.2.0.tgz
     version: 0.2.0
   - apiVersion: v2
     appVersion: 0.1.3
-    created: "2026-03-28T02:45:22.102819826Z"
+    created: "2026-03-28T02:55:47.919859031Z"
     dependencies:
     - name: cloudnative-pg
       repository: https://cloudnative-pg.github.io/charts/
@@ -29,7 +29,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 0.1.3-smoke.2
-    created: "2026-03-28T02:45:22.096147674Z"
+    created: "2026-03-28T02:55:47.912151979Z"
     dependencies:
     - name: cloudnative-pg
       repository: https://cloudnative-pg.github.io/charts/
@@ -40,4 +40,4 @@ entries:
     urls:
     - https://guanzhousongmicrosoft.github.io/documentdb-kubernetes-operator/documentdb-operator-0.1.3-smoke.2.tgz
     version: 0.1.3-smoke.2
-generated: "2026-03-28T02:45:22.087837678Z"
+generated: "2026-03-28T02:55:47.904424912Z"
