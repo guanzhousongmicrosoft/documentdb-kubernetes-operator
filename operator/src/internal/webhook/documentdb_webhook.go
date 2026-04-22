@@ -6,10 +6,12 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -156,7 +158,8 @@ func (v *DocumentDBValidator) validateChanges(newDB, oldDB *dbpreview.DocumentDB
 	type validationFunc func(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList
 	validations := []validationFunc{
 		v.validateImageRollback,
-		// Add new update-only validations here.
+		v.validateImmutableFields,
+		v.validateStorageResize,
 	}
 	for _, fn := range validations {
 		allErrs = append(allErrs, fn(newDB, oldDB)...)
@@ -208,6 +211,80 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 		)}
 	}
 	return nil
+}
+
+// validateImmutableFields rejects updates to fields that cannot be changed after creation.
+// Note: credentialSecret, storageClass, and sidecarInjectorPluginName are enforced via
+// CEL transition rules on the CRD schema (see documentdb_types.go).
+func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Bootstrap configuration is only used during initial cluster creation and is
+	// ignored afterward. Setting it to nil (cleanup) is allowed, but changing to a
+	// different value is rejected since it cannot re-bootstrap a running cluster.
+	// This is kept in the webhook (not CEL) because it's an optional pointer field
+	// where CEL transition rules don't reliably catch all mutation patterns.
+	if newDB.Spec.Bootstrap != nil && !isBootstrapEqual(newDB.Spec.Bootstrap, oldDB.Spec.Bootstrap) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "bootstrap"),
+			"bootstrap configuration cannot be changed after cluster creation",
+		))
+	}
+
+	return allErrs
+}
+
+// validateStorageResize ensures PVC size can only grow, never shrink.
+func (v *DocumentDBValidator) validateStorageResize(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+	oldSize := oldDB.Spec.Resource.Storage.PvcSize
+	newSize := newDB.Spec.Resource.Storage.PvcSize
+	if oldSize == newSize {
+		return nil
+	}
+
+	pvcSizePath := field.NewPath("spec", "resource", "storage", "pvcSize")
+	var allErrs field.ErrorList
+
+	oldQty, errOld := resource.ParseQuantity(oldSize)
+	if errOld != nil {
+		allErrs = append(allErrs, field.Invalid(
+			pvcSizePath,
+			oldSize,
+			fmt.Sprintf("existing pvcSize is not a valid resource quantity: %v", errOld),
+		))
+	}
+
+	newQty, errNew := resource.ParseQuantity(newSize)
+	if errNew != nil {
+		allErrs = append(allErrs, field.Invalid(
+			pvcSizePath,
+			newSize,
+			fmt.Sprintf("pvcSize must be a valid resource quantity: %v", errNew),
+		))
+	}
+
+	if len(allErrs) > 0 {
+		return allErrs
+	}
+
+	if newQty.Cmp(oldQty) < 0 {
+		return field.ErrorList{field.Forbidden(
+			pvcSizePath,
+			fmt.Sprintf("storage size can only be increased; attempted shrink from %s to %s", oldSize, newSize),
+		)}
+	}
+	return nil
+}
+
+// isBootstrapEqual compares two BootstrapConfiguration pointers for equality.
+func isBootstrapEqual(a, b *dbpreview.BootstrapConfiguration) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -122,6 +123,70 @@ func SyncCnpgCluster(
 				}
 			}
 		}
+	}
+
+	// --- Mutable spec fields ---
+	// CNPG natively detects changes to these fields and triggers rolling restarts
+	// when needed (via PodSpec drift detection or image comparison), so we only
+	// need to patch the CNPG Cluster spec — no manual restart annotation required.
+
+	// Instances (e.g., instancesPerNode scaling)
+	if current.Spec.Instances != desired.Spec.Instances {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathInstances,
+			Value: desired.Spec.Instances,
+		})
+	}
+
+	// PostgreSQL image (e.g., minor version upgrade)
+	// CNPG detects image mismatch via checkPodImageIsOutdated and triggers rolling update.
+	if current.Spec.ImageName != desired.Spec.ImageName {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathImageName,
+			Value: desired.Spec.ImageName,
+		})
+	}
+
+	// Storage size (grow-only; webhook rejects shrink attempts)
+	if current.Spec.StorageConfiguration.Size != desired.Spec.StorageConfiguration.Size {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathStorageSize,
+			Value: desired.Spec.StorageConfiguration.Size,
+		})
+	}
+
+	// Log level
+	// CNPG renders logLevel into the bootstrap container command (--log-level=...),
+	// so changes cause PodSpec drift detected by checkPodSpecIsOutdated.
+	if current.Spec.LogLevel != desired.Spec.LogLevel {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathLogLevel,
+			Value: desired.Spec.LogLevel,
+		})
+	}
+
+	// Affinity
+	// CNPG includes affinity in the generated PodSpec and detects drift via ComparePodSpecs.
+	if !reflect.DeepEqual(current.Spec.Affinity, desired.Spec.Affinity) {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathAffinity,
+			Value: desired.Spec.Affinity,
+		})
+	}
+
+	// Stop delay (maxStopDelay)
+	// CNPG maps this to terminationGracePeriodSeconds in PodSpec, drift triggers rollout.
+	if current.Spec.MaxStopDelay != desired.Spec.MaxStopDelay {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathMaxStopDelay,
+			Value: desired.Spec.MaxStopDelay,
+		})
 	}
 
 	// Extra operations (e.g., replication changes)

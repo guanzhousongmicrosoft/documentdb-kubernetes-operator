@@ -6,6 +6,7 @@ package webhook
 import (
 	"context"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -336,5 +337,146 @@ var _ = Describe("extractSemver helper", func() {
 
 	It("returns empty for non-numeric patch", func() {
 		Expect(extractSemver("0.112.abc")).To(BeEmpty())
+	})
+})
+
+var _ = Describe("validateImmutableFields", func() {
+	v := &DocumentDBValidator{}
+
+	// Note: credentialSecret, storageClass, and sidecarInjectorPluginName immutability
+	// is now enforced via CEL transition rules on the CRD schema (see documentdb_types.go).
+	// Only bootstrap is validated in the webhook because it's an optional pointer field
+	// where CEL transition rules don't reliably catch all mutation patterns.
+
+	It("rejects bootstrap config change", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "different-backup"},
+			},
+		}
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.bootstrap"))
+	})
+
+	It("allows bootstrap nil-to-nil (both unset)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		newDB := newTestDocumentDB("", "", "")
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("allows unchanged bootstrap configuration", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("allows bootstrap removal (set to nil is cleanup)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Bootstrap = nil
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects bootstrap addition on running cluster (nil to set)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Bootstrap = nil
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.bootstrap"))
+	})
+})
+
+var _ = Describe("validateStorageResize", func() {
+	v := &DocumentDBValidator{}
+
+	It("allows storage size increase", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "10Gi"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "20Gi"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects storage size decrease", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "20Gi"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "10Gi"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.pvcSize"))
+		Expect(errs[0].Detail).To(ContainSubstring("shrink"))
+	})
+
+	It("allows same size (no-op)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		newDB := newTestDocumentDB("", "", "")
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects invalid old pvcSize", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "not-a-quantity"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "10Gi"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.pvcSize"))
+		Expect(errs[0].Detail).To(ContainSubstring("existing pvcSize is not a valid resource quantity"))
+	})
+
+	It("rejects invalid new pvcSize", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "10Gi"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "abc"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.pvcSize"))
+		Expect(errs[0].Detail).To(ContainSubstring("pvcSize must be a valid resource quantity"))
 	})
 })
