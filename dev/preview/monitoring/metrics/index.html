@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="How DocumentDB handles automatic failover through local replica promotion, cross-cluster failover for multi-region deployments, and application connection considerations.">
+        <meta name="description" content="Reference for DocumentDB-owned metrics emitted by the operator-managed OpenTelemetry sidecar.">
       
       
       
       
-        <link rel="prev" href="../upgrades/">
+        <link rel="prev" href="../overview/">
       
       
-        <link rel="next" href="../backup-and-restore/">
+        <link rel="next" href="../../multi-region-deployment/overview/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Failover - DocumentDB-Kubernetes-Operator</title>
+        <title>Metrics Reference - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#failover" class="md-skip">
+        <a href="#metrics-reference" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Failover
+              Metrics Reference
             
           </span>
         </div>
@@ -741,8 +741,6 @@
                 
   
   
-    
-  
   
   
     
@@ -757,11 +755,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
         
           
           <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
@@ -775,7 +773,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1_5">
             <span class="md-nav__icon md-icon"></span>
             Operations
@@ -789,7 +787,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../upgrades/" class="md-nav__link">
+      <a href="../../operations/upgrades/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -807,30 +805,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Failover
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../operations/failover/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -839,110 +817,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      Overview
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#local-automatic-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Local Automatic Failover
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
-    <span class="md-ellipsis">
-      Cross-Cluster Failover (Multi-Region)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Architecture
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
-    <span class="md-ellipsis">
-      Promoting a Standby DocumentDB Cluster
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#application-considerations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Application Considerations
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Application Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#connection-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connection Handling
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#behavior-during-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Behavior During Failover
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -955,7 +829,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backup-and-restore/" class="md-nav__link">
+      <a href="../../operations/backup-and-restore/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -976,7 +850,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../restore-deleted-cluster/" class="md-nav__link">
+      <a href="../../operations/restore-deleted-cluster/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -997,7 +871,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../maintenance/" class="md-nav__link">
+      <a href="../../operations/maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1137,6 +1011,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1151,11 +1027,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_8" checked>
         
           
           <label class="md-nav__link" for="__nav_1_8" id="__nav_1_8_label" tabindex="">
@@ -1169,7 +1045,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_8_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_8_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1_8">
             <span class="md-nav__icon md-icon"></span>
             Monitoring
@@ -1183,7 +1059,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../monitoring/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1201,10 +1077,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../monitoring/metrics/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Metrics Reference
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -1213,6 +1109,68 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#available-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Available metrics
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available metrics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#postgresql-health" class="md-nav__link">
+    <span class="md-ellipsis">
+      PostgreSQL health
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#planned-documentdb-metric-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Planned DocumentDB metric groups
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pod-and-container-resource-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pod and container resource metrics
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1509,46 +1467,19 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#available-metrics" class="md-nav__link">
     <span class="md-ellipsis">
-      Overview
+      Available metrics
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#local-automatic-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Local Automatic Failover
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
-    <span class="md-ellipsis">
-      Cross-Cluster Failover (Multi-Region)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
+    <nav class="md-nav" aria-label="Available metrics">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
+  <a href="#postgresql-health" class="md-nav__link">
     <span class="md-ellipsis">
-      Architecture
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
-    <span class="md-ellipsis">
-      Promoting a Standby DocumentDB Cluster
+      PostgreSQL health
     </span>
   </a>
   
@@ -1560,35 +1491,20 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#application-considerations" class="md-nav__link">
+  <a href="#planned-documentdb-metric-groups" class="md-nav__link">
     <span class="md-ellipsis">
-      Application Considerations
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Application Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#connection-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connection Handling
+      Planned DocumentDB metric groups
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#behavior-during-failover" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#pod-and-container-resource-metrics" class="md-nav__link">
     <span class="md-ellipsis">
-      Behavior During Failover
+      Pod and container resource metrics
     </span>
   </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1610,56 +1526,103 @@
   
 
 
-<h1 id="failover">Failover<a class="headerlink" href="#failover" title="Permanent link">&para;</a></h1>
-<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Failover promotes a replica to primary when the current primary becomes unavailable. Because all client traffic — both reads and writes — routes through the primary, failover causes a brief period of downtime until the new primary is ready. This typically completes within seconds.</p>
-<p>The DocumentDB operator supports two levels of failover:</p>
-<ul>
-<li><strong>Local failover</strong> — automatic promotion of a replica to primary within a single DocumentDB cluster.</li>
-<li><strong>Cross-cluster failover</strong> — manual promotion of a standby DocumentDB cluster to primary in a multi-region deployment.</li>
-</ul>
-<h2 id="local-automatic-failover">Local Automatic Failover<a class="headerlink" href="#local-automatic-failover" title="Permanent link">&para;</a></h2>
-<p>Local automatic failover requires at least two instances (<code>spec.instancesPerNode &gt;= 2</code>). With a single instance, there is only the primary and no replica available to promote — so failover is not possible. When multiple instances are running, the operator automatically promotes a replica to primary if the current primary becomes unavailable.</p>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>Match <code>spec.instancesPerNode</code> to the number of availability zones in your Kubernetes cluster. This distributes replicas across zones and ensures the DocumentDB cluster can survive a zone failure.</p>
-</div>
-<h2 id="cross-cluster-failover-multi-region">Cross-Cluster Failover (Multi-Region)<a class="headerlink" href="#cross-cluster-failover-multi-region" title="Permanent link">&para;</a></h2>
-<p>For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. The primary itself can be a multi-instance HA cluster (with <code>spec.instancesPerNode &gt;= 2</code>), providing local failover within the region. Cross-cluster failover to another region is only needed if the entire primary region becomes unavailable.</p>
-<p>For end-to-end setup examples, see the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment">AKS Fleet multi-region deployment</a> and <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment</a> playgrounds.</p>
-<h3 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h3>
-<p>In a multi-region setup:</p>
-<ul>
-<li>One DocumentDB cluster is designated as the <strong>primary</strong> and handles all writes.</li>
-<li>Other DocumentDB clusters are <strong>standbys</strong> that replicate from the primary via streaming replication.</li>
-</ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">clusterReplication</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">disableTLS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">crossCloudNetworkingStrategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AzureFleet</span><span class="w">  </span><span class="c1"># or Istio, None</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">clusterList</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-1</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-2</span>
+<h1 id="metrics-reference">Metrics Reference<a class="headerlink" href="#metrics-reference" title="Permanent link">&para;</a></h1>
+<p>This page documents metrics that are part of the DocumentDB operator monitoring contract. OpenTelemetry metric names are canonical; each backend may render names and labels differently.</p>
+<h2 id="available-metrics">Available metrics<a class="headerlink" href="#available-metrics" title="Permanent link">&para;</a></h2>
+<h3 id="postgresql-health">PostgreSQL health<a class="headerlink" href="#postgresql-health" title="Permanent link">&para;</a></h3>
+<p>The sidecar runs a lightweight SQL health query against the local PostgreSQL container in each DocumentDB pod.</p>
+<table>
+<thead>
+<tr>
+<th>OpenTelemetry metric</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>documentdb.postgres.up</code></td>
+<td>Gauge</td>
+<td><code>1</code> when the local PostgreSQL container responds to the sidecar health query.</td>
+</tr>
+</tbody>
+</table>
+<p>Common resource attributes include:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>documentdb.cluster</code></td>
+<td>DocumentDB cluster name</td>
+</tr>
+<tr>
+<td><code>k8s.namespace.name</code></td>
+<td>Kubernetes namespace</td>
+</tr>
+<tr>
+<td><code>k8s.pod.name</code></td>
+<td>Kubernetes pod name</td>
+</tr>
+</tbody>
+</table>
+<p>When exported through the Prometheus exporter, this metric is commonly queried as:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">documentdb_postgres_up</span><span class="p">{</span><span class="nl">documentdb_cluster</span><span class="o">=</span><span class="p">&quot;</span><span class="s">my-cluster</span><span class="p">&quot;}</span>
 </code></pre></div>
-<h3 id="promoting-a-standby-documentdb-cluster">Promoting a Standby DocumentDB Cluster<a class="headerlink" href="#promoting-a-standby-documentdb-cluster" title="Permanent link">&para;</a></h3>
-<p>To promote a standby DocumentDB cluster to primary, update the <code>primary</code> field in all DocumentDB cluster configurations:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On the new primary cluster</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>--type<span class="o">=</span><span class="s1">&#39;json&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-p<span class="o">=</span><span class="s1">&#39;[{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/primary&quot;, &quot;value&quot;: &quot;standby-cluster-1&quot;}]&#39;</span>
-</code></pre></div>
-<h2 id="application-considerations">Application Considerations<a class="headerlink" href="#application-considerations" title="Permanent link">&para;</a></h2>
-<h3 id="connection-handling">Connection Handling<a class="headerlink" href="#connection-handling" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Use the Kubernetes Service</strong> — always connect through the <a href="../../configuration/networking/#service-types">Kubernetes Service</a> (not directly to pod IPs). The Service automatically routes to the current primary.</li>
-<li><strong>Implement retry logic</strong> — during failover, all connections are briefly interrupted. Applications should retry with exponential backoff.</li>
-</ul>
-<h3 id="behavior-during-failover">Behavior During Failover<a class="headerlink" href="#behavior-during-failover" title="Permanent link">&para;</a></h3>
-<p>During failover:
-- Existing connections to the old primary are dropped.
-- There is a brief period of downtime until the new primary is promoted and ready to accept connections.
-- Once the new primary is available, the Kubernetes Service routes traffic to it automatically.</p>
+<h2 id="planned-documentdb-metric-groups">Planned DocumentDB metric groups<a class="headerlink" href="#planned-documentdb-metric-groups" title="Permanent link">&para;</a></h2>
+<p>The preview monitoring API is intentionally small while instrumentation lands. These areas are planned or out of scope for the current preview docs:</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gateway application metrics</td>
+<td>Planned. The sidecar can receive local OTLP from the gateway, but user-facing gateway metrics will be documented after a public gateway image emits them.</td>
+</tr>
+<tr>
+<td>CNPG/PostgreSQL internals</td>
+<td>Out of preview scope. A future revision may expose a curated subset such as replication freshness, PostgreSQL availability, WAL health, and database size.</td>
+</tr>
+<tr>
+<td>Operator controller metrics</td>
+<td>Not yet exposed end-to-end through the operator Helm chart.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pod-and-container-resource-metrics">Pod and container resource metrics<a class="headerlink" href="#pod-and-container-resource-metrics" title="Permanent link">&para;</a></h2>
+<p>Pod CPU, container memory, network I/O, filesystem usage, and node metrics are Kubernetes platform metrics. The DocumentDB operator does not install a node-level collector or grant kubelet permissions to DocumentDB pods.</p>
+<p>Use your existing platform collector, managed cloud agent, kube-prometheus-stack, or OTel Collector DaemonSet for these metrics. Filter that data to DocumentDB workloads using pod or container attributes such as:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Typical values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>k8s.namespace.name</code></td>
+<td>Namespace that contains the DocumentDB cluster</td>
+</tr>
+<tr>
+<td><code>k8s.pod.name</code></td>
+<td>DocumentDB pod name</td>
+</tr>
+<tr>
+<td><code>k8s.container.name</code></td>
+<td><code>postgres</code>, <code>documentdb-gateway</code>, <code>otel-collector</code></td>
+</tr>
+</tbody>
+</table>
+<p>If your cluster does not already collect kubelet-backed resource metrics, the playground includes a reference DaemonSet at <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry/container-metrics"><code>documentdb-playground/telemetry/container-metrics/</code></a>. Treat it as a starting point for demo or platform-owned deployments, not as part of the DocumentDB operator monitoring contract.</p>
 
 
 

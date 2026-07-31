@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="How DocumentDB handles automatic failover through local replica promotion, cross-cluster failover for multi-region deployments, and application connection considerations.">
+        <meta name="description" content="Understand what changes when you extend a multi-region DocumentDB deployment across AKS, GKE, and EKS instead of staying within one cloud provider.">
       
       
       
       
-        <link rel="prev" href="../upgrades/">
+        <link rel="prev" href="../failover-procedures/">
       
       
-        <link rel="next" href="../backup-and-restore/">
+        <link rel="next" href="../../faq/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Failover - DocumentDB-Kubernetes-Operator</title>
+        <title>Multi-cloud differences - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#failover" class="md-skip">
+        <a href="#overview" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Failover
+              Multi-cloud differences
             
           </span>
         </div>
@@ -741,8 +741,6 @@
                 
   
   
-    
-  
   
   
     
@@ -757,11 +755,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
         
           
           <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
@@ -775,7 +773,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1_5">
             <span class="md-nav__icon md-icon"></span>
             Operations
@@ -789,7 +787,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../upgrades/" class="md-nav__link">
+      <a href="../../operations/upgrades/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -807,30 +805,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Failover
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../operations/failover/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -839,110 +817,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      Overview
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#local-automatic-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Local Automatic Failover
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
-    <span class="md-ellipsis">
-      Cross-Cluster Failover (Multi-Region)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Architecture
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
-    <span class="md-ellipsis">
-      Promoting a Standby DocumentDB Cluster
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#application-considerations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Application Considerations
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Application Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#connection-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connection Handling
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#behavior-during-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Behavior During Failover
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -955,7 +829,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backup-and-restore/" class="md-nav__link">
+      <a href="../../operations/backup-and-restore/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -976,7 +850,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../restore-deleted-cluster/" class="md-nav__link">
+      <a href="../../operations/restore-deleted-cluster/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -997,7 +871,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../maintenance/" class="md-nav__link">
+      <a href="../../operations/maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1230,6 +1104,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1244,11 +1120,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_9" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_9" checked>
         
           
           <label class="md-nav__link" for="__nav_1_9" id="__nav_1_9_label" tabindex="">
@@ -1262,7 +1138,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_9_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_9_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1_9">
             <span class="md-nav__icon md-icon"></span>
             Multi-region deployment
@@ -1276,7 +1152,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1297,7 +1173,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/setup/" class="md-nav__link">
+      <a href="../setup/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1318,7 +1194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/failover-procedures/" class="md-nav__link">
+      <a href="../failover-procedures/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1336,10 +1212,28 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../multi-region-deployment/multi-cloud/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Multi-cloud differences
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -1348,6 +1242,120 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-changes-in-multi-cloud-deployments" class="md-nav__link">
+    <span class="md-ellipsis">
+      What changes in multi-cloud deployments
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What changes in multi-cloud deployments">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#provider-deployment-guides-still-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      Provider deployment guides still apply
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#networking-becomes-the-primary-design-decision" class="md-nav__link">
+    <span class="md-ellipsis">
+      Networking becomes the primary design decision
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#service-discovery-needs-a-cross-provider-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Service discovery needs a cross-provider plan
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identity-and-permissions-are-provider-specific" class="md-nav__link">
+    <span class="md-ellipsis">
+      Identity and permissions are provider-specific
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dns-and-client-routing-need-an-external-source-of-truth" class="md-nav__link">
+    <span class="md-ellipsis">
+      DNS and client routing need an external source of truth
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observability-must-include-the-network-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Observability must include the network layer
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-the-playground" class="md-nav__link">
+    <span class="md-ellipsis">
+      When to use the playground
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1499,8 +1507,6 @@
   
   
   
-    
-  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -1518,37 +1524,64 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#local-automatic-failover" class="md-nav__link">
+  <a href="#what-changes-in-multi-cloud-deployments" class="md-nav__link">
     <span class="md-ellipsis">
-      Local Automatic Failover
+      What changes in multi-cloud deployments
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
-    <span class="md-ellipsis">
-      Cross-Cluster Failover (Multi-Region)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
+    <nav class="md-nav" aria-label="What changes in multi-cloud deployments">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
+  <a href="#provider-deployment-guides-still-apply" class="md-nav__link">
     <span class="md-ellipsis">
-      Architecture
+      Provider deployment guides still apply
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
+  <a href="#networking-becomes-the-primary-design-decision" class="md-nav__link">
     <span class="md-ellipsis">
-      Promoting a Standby DocumentDB Cluster
+      Networking becomes the primary design decision
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#service-discovery-needs-a-cross-provider-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      Service discovery needs a cross-provider plan
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#identity-and-permissions-are-provider-specific" class="md-nav__link">
+    <span class="md-ellipsis">
+      Identity and permissions are provider-specific
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dns-and-client-routing-need-an-external-source-of-truth" class="md-nav__link">
+    <span class="md-ellipsis">
+      DNS and client routing need an external source of truth
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#observability-must-include-the-network-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Observability must include the network layer
     </span>
   </a>
   
@@ -1560,35 +1593,20 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#application-considerations" class="md-nav__link">
+  <a href="#when-to-use-the-playground" class="md-nav__link">
     <span class="md-ellipsis">
-      Application Considerations
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Application Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#connection-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connection Handling
+      When to use the playground
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#behavior-during-failover" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Behavior During Failover
+      Next steps
     </span>
   </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1610,56 +1628,148 @@
   
 
 
-<h1 id="failover">Failover<a class="headerlink" href="#failover" title="Permanent link">&para;</a></h1>
+  <h1>Multi-cloud differences</h1>
+
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Failover promotes a replica to primary when the current primary becomes unavailable. Because all client traffic — both reads and writes — routes through the primary, failover causes a brief period of downtime until the new primary is ready. This typically completes within seconds.</p>
-<p>The DocumentDB operator supports two levels of failover:</p>
+<p>A multi-cloud DocumentDB deployment is a multi-region deployment where the
+participating Kubernetes clusters run in different cloud providers. The
+<a href="../overview/#primary-replica-model">primary-replica model</a>, replication
+configuration, and failover behavior are the same as any multi-region
+deployment.</p>
+<p>Use the multi-region docs as the baseline for topology, setup, and failover:</p>
 <ul>
-<li><strong>Local failover</strong> — automatic promotion of a replica to primary within a single DocumentDB cluster.</li>
-<li><strong>Cross-cluster failover</strong> — manual promotion of a standby DocumentDB cluster to primary in a multi-region deployment.</li>
+<li><a href="../overview/">Multi-region deployment overview</a></li>
+<li><a href="../setup/">Multi-region setup guide</a></li>
+<li><a href="../failover-procedures/">Multi-region failover procedures</a></li>
 </ul>
-<h2 id="local-automatic-failover">Local Automatic Failover<a class="headerlink" href="#local-automatic-failover" title="Permanent link">&para;</a></h2>
-<p>Local automatic failover requires at least two instances (<code>spec.instancesPerNode &gt;= 2</code>). With a single instance, there is only the primary and no replica available to promote — so failover is not possible. When multiple instances are running, the operator automatically promotes a replica to primary if the current primary becomes unavailable.</p>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>Match <code>spec.instancesPerNode</code> to the number of availability zones in your Kubernetes cluster. This distributes replicas across zones and ensures the DocumentDB cluster can survive a zone failure.</p>
-</div>
-<h2 id="cross-cluster-failover-multi-region">Cross-Cluster Failover (Multi-Region)<a class="headerlink" href="#cross-cluster-failover-multi-region" title="Permanent link">&para;</a></h2>
-<p>For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. The primary itself can be a multi-instance HA cluster (with <code>spec.instancesPerNode &gt;= 2</code>), providing local failover within the region. Cross-cluster failover to another region is only needed if the entire primary region becomes unavailable.</p>
-<p>For end-to-end setup examples, see the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment">AKS Fleet multi-region deployment</a> and <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment</a> playgrounds.</p>
-<h3 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h3>
-<p>In a multi-region setup:</p>
+<p>This page covers only the differences that matter when those Kubernetes clusters
+span AKS, GKE, EKS, or another provider mix.</p>
+<h2 id="what-changes-in-multi-cloud-deployments">What changes in multi-cloud deployments<a class="headerlink" href="#what-changes-in-multi-cloud-deployments" title="Permanent link">&para;</a></h2>
+<h3 id="provider-deployment-guides-still-apply">Provider deployment guides still apply<a class="headerlink" href="#provider-deployment-guides-still-apply" title="Permanent link">&para;</a></h3>
+<p>Start with the single-provider deployment guides when you need provider-specific
+Kubernetes prerequisites, storage defaults, authentication setup, and service
+exposure behavior. The multi-cloud layer changes how the Kubernetes clusters
+connect to each other; it doesn't replace the provider-specific setup work for
+each member Kubernetes cluster.</p>
 <ul>
-<li>One DocumentDB cluster is designated as the <strong>primary</strong> and handles all writes.</li>
-<li>Other DocumentDB clusters are <strong>standbys</strong> that replicate from the primary via streaming replication.</li>
+<li><a href="../../getting-started/deploy-on-aks/">Deploy on AKS</a></li>
+<li><a href="../../getting-started/deploy-on-eks/">Deploy on EKS</a></li>
+<li><a href="../../getting-started/deploy-on-gke/">Deploy on GKE</a></li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">clusterReplication</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">disableTLS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">crossCloudNetworkingStrategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AzureFleet</span><span class="w">  </span><span class="c1"># or Istio, None</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">clusterList</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-1</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-2</span>
+<p>Use the <code>clusterList[].environment</code> variables to indicate which Kubernetes clusters
+use certain cloud providers for automatic additions from those guides.</p>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-preview</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-preview-ns</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">clusterReplication</span><span class="p">:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-cluster</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">clusterList</span><span class="p">:</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aws-cluster</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">        </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eks</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-cluster</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">        </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aks</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gcp-cluster</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">        </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gke</span>
 </code></pre></div>
-<h3 id="promoting-a-standby-documentdb-cluster">Promoting a Standby DocumentDB Cluster<a class="headerlink" href="#promoting-a-standby-documentdb-cluster" title="Permanent link">&para;</a></h3>
-<p>To promote a standby DocumentDB cluster to primary, update the <code>primary</code> field in all DocumentDB cluster configurations:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On the new primary cluster</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>--type<span class="o">=</span><span class="s1">&#39;json&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-p<span class="o">=</span><span class="s1">&#39;[{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/primary&quot;, &quot;value&quot;: &quot;standby-cluster-1&quot;}]&#39;</span>
-</code></pre></div>
-<h2 id="application-considerations">Application Considerations<a class="headerlink" href="#application-considerations" title="Permanent link">&para;</a></h2>
-<h3 id="connection-handling">Connection Handling<a class="headerlink" href="#connection-handling" title="Permanent link">&para;</a></h3>
+<h3 id="networking-becomes-the-primary-design-decision">Networking becomes the primary design decision<a class="headerlink" href="#networking-becomes-the-primary-design-decision" title="Permanent link">&para;</a></h3>
+<p>In a single cloud provider, you can usually rely on a cohesive private
+networking model such as VNet peering, VPC peering, private DNS, and provider
+load balancers. In a multi-cloud deployment, those assumptions don't hold across
+every Kubernetes cluster. You need an explicit cross-cloud networking design for
+replication traffic, service discovery, and operational access.</p>
+<p>Common approaches include:</p>
 <ul>
-<li><strong>Use the Kubernetes Service</strong> — always connect through the <a href="../../configuration/networking/#service-types">Kubernetes Service</a> (not directly to pod IPs). The Service automatically routes to the current primary.</li>
-<li><strong>Implement retry logic</strong> — during failover, all connections are briefly interrupted. Applications should retry with exponential backoff.</li>
+<li><strong>Cross Kubernetes cluster mesh:</strong> Use east-west gateways, shared trust,
+  remote secrets, and mesh service discovery to route replication traffic across
+  providers. Tools like Istio can manage this automatically.</li>
+<li><strong>Site-to-site VPNs:</strong> Connect cloud networks with VPN tunnels when your
+  organization needs private IP connectivity but doesn't have one native
+  provider network that spans every Kubernetes cluster.</li>
+<li><strong>Cloud interconnect or private WAN:</strong> Use dedicated connectivity when latency,
+  bandwidth, or compliance requirements exceed what internet-routed VPN or mesh
+  gateways can provide.</li>
+<li><strong>Public load balancers with strict controls:</strong> Use provider load balancers
+  only when private connectivity isn't available, and pair them with TLS,
+  firewall restrictions, and tightly scoped access.</li>
 </ul>
-<h3 id="behavior-during-failover">Behavior During Failover<a class="headerlink" href="#behavior-during-failover" title="Permanent link">&para;</a></h3>
-<p>During failover:
-- Existing connections to the old primary are dropped.
-- There is a brief period of downtime until the new primary is promoted and ready to accept connections.
-- Once the new primary is available, the Kubernetes Service routes traffic to it automatically.</p>
+<p>The playground uses Istio as the reference approach because it works easily across
+AKS, GKE, and EKS without requiring one provider's private networking model to cover
+all member Kubernetes clusters. For implementation details, see the
+<a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment playground</a>
+and the upstream <a href="https://istio.io/latest/docs/setup/install/multicluster/multi-primary_multi-network/">Istio multi-primary multi-network documentation</a>.
+For high throughput production situations, consult with networking professionals
+to select the most performant tools for your needs.</p>
+<p>For operator-level networking configuration, including the
+<code>crossCloudNetworkingStrategy</code> field, see the
+<a href="../setup/#networking-management">multi-region setup guide</a>.</p>
+<h3 id="service-discovery-needs-a-cross-provider-plan">Service discovery needs a cross-provider plan<a class="headerlink" href="#service-discovery-needs-a-cross-provider-plan" title="Permanent link">&para;</a></h3>
+<p>DocumentDB replication depends on
+<a href="../overview/#dns-and-service-discovery">stable service names and reachable endpoints</a>.
+Within one provider, private DNS and network peering are often enough. Across
+providers, decide how each Kubernetes cluster resolves and reaches the services
+in the other Kubernetes clusters.</p>
+<p>If you use Istio, remote secrets and east-west gateways provide the discovery
+and routing path. If you use site-to-site VPNs or private WAN connectivity, make
+sure DNS zones, conditional forwarding, firewall rules, and route tables are
+configured consistently across providers.</p>
+<h3 id="identity-and-permissions-are-provider-specific">Identity and permissions are provider-specific<a class="headerlink" href="#identity-and-permissions-are-provider-specific" title="Permanent link">&para;</a></h3>
+<p>Multi-region deployments within one provider often share one IAM (Identity and
+Access Management) model. In a multi-cloud deployment, each provider has its own
+identity system, permission model, audit trail, and credential refresh behavior.</p>
+<p>Plan for:</p>
+<ul>
+<li>Separate cloud identities for AKS, GKE, and EKS operations.</li>
+<li>Kubernetes RBAC on every member Kubernetes cluster.</li>
+<li>Fleet or GitOps permissions for resource propagation.</li>
+<li>Provider-specific permissions for load balancers, disks, DNS, and network
+  changes.</li>
+</ul>
+<p>The playground README lists the required provider tools and permissions in
+<a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md#prerequisites">Prerequisites</a>.</p>
+<h3 id="dns-and-client-routing-need-an-external-source-of-truth">DNS and client routing need an external source of truth<a class="headerlink" href="#dns-and-client-routing-need-an-external-source-of-truth" title="Permanent link">&para;</a></h3>
+<p>After failover, clients must reach the promoted primary DocumentDB cluster. In a
+single cloud provider, your DNS and traffic-routing options may be standardized.
+Across providers, choose a source of truth that all clients can use, such as a
+shared DNS zone, global traffic manager, or application configuration system.</p>
+<p>The playground can create Azure DNS records, including MongoDB SRV records, as
+one example. See
+<a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md#azure-dns-configuration">Azure DNS configuration</a>
+and <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md#connect-to-database">Connect to database</a>.</p>
+<h3 id="observability-must-include-the-network-layer">Observability must include the network layer<a class="headerlink" href="#observability-must-include-the-network-layer" title="Permanent link">&para;</a></h3>
+<p>Multi-cloud failures often show up first as networking symptoms: gateway health,
+DNS resolution, route changes, packet loss, or certificate trust issues. In
+addition to monitoring <a href="../overview/#replication-lag">replication lag</a> and
+DocumentDB cluster health, monitor:</p>
+<ul>
+<li>Istio control plane and east-west gateway health.</li>
+<li>VPN or interconnect tunnel status.</li>
+<li>Cross-provider latency and packet loss.</li>
+<li>Provider load balancer health.</li>
+<li>DNS record propagation and client resolution.</li>
+<li>Basic connectivity between database nodes and the application layer.</li>
+<li>Application gateway selection, to avoid unintended cross-cloud latency.</li>
+</ul>
+<p>For a playground observability example, see the
+<a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment/telemetry">multi-cloud telemetry folder</a>.</p>
+<h2 id="when-to-use-the-playground">When to use the playground<a class="headerlink" href="#when-to-use-the-playground" title="Permanent link">&para;</a></h2>
+<p>Use the multi-cloud playground when you want a runnable AKS, GKE, and EKS
+reference deployment. Keep the public docs as the conceptual baseline, and use
+the playground for exact commands, environment variables, templates, and cleanup
+steps:</p>
+<ul>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/deploy.sh">deploy.sh</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/deploy-documentdb.sh">deploy-documentdb.sh</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md#failover-operations">Multi-cloud failover operations</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md#troubleshooting">Multi-cloud troubleshooting</a></li>
+</ul>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../failover-procedures/">Multi-region failover procedures</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md">Multi-cloud playground</a></li>
+</ul>
 
 
 

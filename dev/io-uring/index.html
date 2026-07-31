@@ -6,27 +6,27 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="How DocumentDB handles automatic failover through local replica promotion, cross-cluster failover for multi-region deployments, and application connection considerations.">
+        <meta name="description" content="Enable PostgreSQL 18 asynchronous I/O (io_method=io_uring) in DocumentDB through the IOUring feature gate, including the seccomp trade-offs, operator configuration, prerequisites, verification, and troubleshooting.">
       
       
       
       
-        <link rel="prev" href="../upgrades/">
+        <link rel="prev" href="../postgresql-tuning/">
       
       
-        <link rel="next" href="../backup-and-restore/">
+        <link rel="next" href="../preview/operations/upgrades/">
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
     
     
       
-        <title>Failover - DocumentDB-Kubernetes-Operator</title>
+        <title>io_uring async I/O feature gate - DocumentDB-Kubernetes-Operator</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.66ac8b77.min.css">
       
       
 
@@ -45,7 +45,7 @@
       
     
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#failover" class="md-skip">
+        <a href="#io_uring-async-io-feature-gate" class="md-skip">
           Skip to content
         </a>
       
@@ -82,7 +82,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href=".." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Failover
+              io_uring async I/O feature gate
             
           </span>
         </div>
@@ -189,7 +189,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+        <a href="../preview/" class="md-tabs__link">
           
   
   Preview
@@ -222,7 +222,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href=".." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -297,7 +297,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../preview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -361,7 +361,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/before-you-start/" class="md-nav__link">
+      <a href="../preview/getting-started/before-you-start/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -382,7 +382,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart-kind/" class="md-nav__link">
+      <a href="../preview/getting-started/quickstart-kind/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -403,7 +403,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart-k3s/" class="md-nav__link">
+      <a href="../preview/getting-started/quickstart-k3s/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -424,7 +424,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/deploy-on-aks/" class="md-nav__link">
+      <a href="../preview/getting-started/deploy-on-aks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -445,7 +445,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/deploy-on-eks/" class="md-nav__link">
+      <a href="../preview/getting-started/deploy-on-eks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -466,7 +466,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/deploy-on-gke/" class="md-nav__link">
+      <a href="../preview/getting-started/deploy-on-gke/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -487,7 +487,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/connecting-to-documentdb/" class="md-nav__link">
+      <a href="../preview/getting-started/connecting-to-documentdb/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -559,167 +559,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
+      <a href="../preview/architecture/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
     Overview
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
-        
-          
-          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
-            
-  
-  <span class="md-ellipsis">
-    Configuration
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_1_4">
-            <span class="md-nav__icon md-icon"></span>
-            Configuration
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../configuration/storage/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Storage
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../configuration/networking/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Networking
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../configuration/tls/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    TLS
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../postgresql-tuning/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    PostgreSQL Tuning
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../io-uring/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    io_uring Async I/O
   </span>
   
 
@@ -761,24 +605,24 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
             
   
   <span class="md-ellipsis">
-    Operations
+    Configuration
   </span>
   
 
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_5">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_4">
             <span class="md-nav__icon md-icon"></span>
-            Operations
+            Configuration
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -789,11 +633,74 @@
   
   
     <li class="md-nav__item">
-      <a href="../upgrades/" class="md-nav__link">
+      <a href="../preview/configuration/storage/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
-    Upgrades
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../postgresql-tuning/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PostgreSQL Tuning
   </span>
   
 
@@ -823,7 +730,7 @@
           
   
   <span class="md-ellipsis">
-    Failover
+    io_uring Async I/O
   </span>
   
 
@@ -834,7 +741,7 @@
         
   
   <span class="md-ellipsis">
-    Failover
+    io_uring Async I/O
   </span>
   
 
@@ -865,37 +772,73 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#local-automatic-failover" class="md-nav__link">
+  <a href="#what-enabling-the-gate-does" class="md-nav__link">
     <span class="md-ellipsis">
-      Local Automatic Failover
+      What enabling the gate does
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
+  <a href="#how-to-enable" class="md-nav__link">
     <span class="md-ellipsis">
-      Cross-Cluster Failover (Multi-Region)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Architecture
+      How to enable
     </span>
   </a>
   
 </li>
+      
+        <li class="md-nav__item">
+  <a href="#seccomp-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Seccomp configuration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
+  <a href="#postgresql-crashloops-with-could-not-setup-io_uring-queue" class="md-nav__link">
     <span class="md-ellipsis">
-      Promoting a Standby DocumentDB Cluster
+      PostgreSQL CrashLoops with "could not setup io_uring queue"
     </span>
   </a>
   
@@ -907,35 +850,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#application-considerations" class="md-nav__link">
+  <a href="#related" class="md-nav__link">
     <span class="md-ellipsis">
-      Application Considerations
+      Related
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Application Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#connection-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connection Handling
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#behavior-during-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Behavior During Failover
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -948,6 +867,57 @@
 
               
             
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Operations
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            Operations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
   
@@ -955,7 +925,49 @@
   
   
     <li class="md-nav__item">
-      <a href="../backup-and-restore/" class="md-nav__link">
+      <a href="../preview/operations/upgrades/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Upgrades
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/operations/failover/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Failover
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/operations/backup-and-restore/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -976,7 +988,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../restore-deleted-cluster/" class="md-nav__link">
+      <a href="../preview/operations/restore-deleted-cluster/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -997,7 +1009,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../maintenance/" class="md-nav__link">
+      <a href="../preview/operations/maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1069,7 +1081,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../high-availability/overview/" class="md-nav__link">
+      <a href="../preview/high-availability/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1090,7 +1102,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../high-availability/local-ha/" class="md-nav__link">
+      <a href="../preview/high-availability/local-ha/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1119,7 +1131,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced-configuration/" class="md-nav__link">
+      <a href="../preview/advanced-configuration/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1183,7 +1195,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../monitoring/overview/" class="md-nav__link">
+      <a href="../preview/monitoring/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1204,7 +1216,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../monitoring/metrics/" class="md-nav__link">
+      <a href="../preview/monitoring/metrics/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1276,7 +1288,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/overview/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1297,7 +1309,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/setup/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/setup/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1318,7 +1330,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/failover-procedures/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/failover-procedures/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1339,7 +1351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/multi-cloud/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/multi-cloud/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1368,7 +1380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../faq/" class="md-nav__link">
+      <a href="../preview/faq/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1432,7 +1444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../kubectl-plugin/" class="md-nav__link">
+      <a href="../preview/kubectl-plugin/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1461,7 +1473,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/" class="md-nav__link">
+      <a href="../preview/api-reference/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1518,37 +1530,73 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#local-automatic-failover" class="md-nav__link">
+  <a href="#what-enabling-the-gate-does" class="md-nav__link">
     <span class="md-ellipsis">
-      Local Automatic Failover
+      What enabling the gate does
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
+  <a href="#how-to-enable" class="md-nav__link">
     <span class="md-ellipsis">
-      Cross-Cluster Failover (Multi-Region)
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    <span class="md-ellipsis">
-      Architecture
+      How to enable
     </span>
   </a>
   
 </li>
+      
+        <li class="md-nav__item">
+  <a href="#seccomp-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Seccomp configuration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      Verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
+  <a href="#postgresql-crashloops-with-could-not-setup-io_uring-queue" class="md-nav__link">
     <span class="md-ellipsis">
-      Promoting a Standby DocumentDB Cluster
+      PostgreSQL CrashLoops with "could not setup io_uring queue"
     </span>
   </a>
   
@@ -1560,35 +1608,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#application-considerations" class="md-nav__link">
+  <a href="#related" class="md-nav__link">
     <span class="md-ellipsis">
-      Application Considerations
+      Related
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Application Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#connection-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Connection Handling
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#behavior-during-failover" class="md-nav__link">
-    <span class="md-ellipsis">
-      Behavior During Failover
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1610,56 +1634,146 @@
   
 
 
-<h1 id="failover">Failover<a class="headerlink" href="#failover" title="Permanent link">&para;</a></h1>
+<h1 id="io_uring-async-io-feature-gate">io_uring async I/O feature gate<a class="headerlink" href="#io_uring-async-io-feature-gate" title="Permanent link">&para;</a></h1>
+<p>The <code>IOUring</code> feature gate enables PostgreSQL 18's asynchronous I/O backend (<code>io_method=io_uring</code>) for a DocumentDB cluster. Because io_uring requires relaxing the container's seccomp sandbox, the feature is <strong>opt-in</strong> and disabled by default.</p>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Failover promotes a replica to primary when the current primary becomes unavailable. Because all client traffic — both reads and writes — routes through the primary, failover causes a brief period of downtime until the new primary is ready. This typically completes within seconds.</p>
-<p>The DocumentDB operator supports two levels of failover:</p>
-<ul>
-<li><strong>Local failover</strong> — automatic promotion of a replica to primary within a single DocumentDB cluster.</li>
-<li><strong>Cross-cluster failover</strong> — manual promotion of a standby DocumentDB cluster to primary in a multi-region deployment.</li>
-</ul>
-<h2 id="local-automatic-failover">Local Automatic Failover<a class="headerlink" href="#local-automatic-failover" title="Permanent link">&para;</a></h2>
-<p>Local automatic failover requires at least two instances (<code>spec.instancesPerNode &gt;= 2</code>). With a single instance, there is only the primary and no replica available to promote — so failover is not possible. When multiple instances are running, the operator automatically promotes a replica to primary if the current primary becomes unavailable.</p>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>Match <code>spec.instancesPerNode</code> to the number of availability zones in your Kubernetes cluster. This distributes replicas across zones and ensures the DocumentDB cluster can survive a zone failure.</p>
+<p>PostgreSQL 18 introduces a pluggable asynchronous I/O subsystem. On Linux, the <code>io_uring</code> backend submits read I/O through the kernel's <a href="https://en.wikipedia.org/wiki/Io_uring">io_uring</a> interface, which overlaps storage latency instead of blocking on each read.</p>
+<p>DocumentDB doesn't turn this on for you automatically, for one reason: <strong>security</strong>. io_uring has been a recurring kernel-exploit surface, so the container runtime's <code>RuntimeDefault</code> seccomp profile strips the <code>io_uring_setup</code>, <code>io_uring_enter</code>, and <code>io_uring_register</code> syscalls. CloudNative-PG (CNPG) runs the PostgreSQL pods with <code>seccompProfile=RuntimeDefault</code>, so without intervention PostgreSQL crashes at startup with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FATAL: could not setup io_uring queue: Operation not permitted
+</code></pre></div>
+<p>Enabling io_uring therefore means relaxing seccomp — a security trade-off that the Kubernetes cluster operator must consciously accept. DocumentDB makes that choice explicit through the <code>IOUring</code> feature gate rather than enabling it silently.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code>IOUring</code> gate controls one DocumentDB cluster. The seccomp <em>profile</em> (which Localhost profile the operator points the pods at) is configured once on the operator and applies to every DocumentDB cluster it manages. See <a href="#seccomp-configuration">Seccomp configuration</a>.</p>
 </div>
-<h2 id="cross-cluster-failover-multi-region">Cross-Cluster Failover (Multi-Region)<a class="headerlink" href="#cross-cluster-failover-multi-region" title="Permanent link">&para;</a></h2>
-<p>For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. The primary itself can be a multi-instance HA cluster (with <code>spec.instancesPerNode &gt;= 2</code>), providing local failover within the region. Cross-cluster failover to another region is only needed if the entire primary region becomes unavailable.</p>
-<p>For end-to-end setup examples, see the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment">AKS Fleet multi-region deployment</a> and <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment</a> playgrounds.</p>
-<h3 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h3>
-<p>In a multi-region setup:</p>
-<ul>
-<li>One DocumentDB cluster is designated as the <strong>primary</strong> and handles all writes.</li>
-<li>Other DocumentDB clusters are <strong>standbys</strong> that replicate from the primary via streaming replication.</li>
-</ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">clusterReplication</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">disableTLS</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">crossCloudNetworkingStrategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AzureFleet</span><span class="w">  </span><span class="c1"># or Istio, None</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="nt">clusterList</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-1</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-2</span>
+<h2 id="what-enabling-the-gate-does">What enabling the gate does<a class="headerlink" href="#what-enabling-the-gate-does" title="Permanent link">&para;</a></h2>
+<p>When you set <code>spec.featureGates.IOUring: true</code>, the operator does two things natively — <strong>no external Kyverno policy or admission webhook is required</strong>:</p>
+<ol>
+<li><strong>Sets <code>io_method=io_uring</code></strong> as a protected PostgreSQL parameter. This value can't be overridden through <code>spec.postgres.parameters</code>. (See <a href="../postgresql-tuning/">PostgreSQL parameter tuning</a> for how protected parameters work.)</li>
+<li><strong>Relaxes the PostgreSQL container's seccomp profile</strong> so the three io_uring syscalls are allowed. The operator points the CNPG cluster's pod security context at a Localhost seccomp profile (see <a href="#seccomp-configuration">Seccomp configuration</a>).</li>
+</ol>
+<p>When the gate is disabled (the default), the operator changes nothing and CNPG keeps its hardened <code>RuntimeDefault</code> profile.</p>
+<h2 id="how-to-enable">How to enable<a class="headerlink" href="#how-to-enable" title="Permanent link">&para;</a></h2>
+<p>Add the feature gate to your DocumentDB custom resource:</p>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;50Gi&quot;</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">featureGates</span><span class="p">:</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="nt">IOUring</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># (1)!</span>
 </code></pre></div>
-<h3 id="promoting-a-standby-documentdb-cluster">Promoting a Standby DocumentDB Cluster<a class="headerlink" href="#promoting-a-standby-documentdb-cluster" title="Permanent link">&para;</a></h3>
-<p>To promote a standby DocumentDB cluster to primary, update the <code>primary</code> field in all DocumentDB cluster configurations:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On the new primary cluster</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>--type<span class="o">=</span><span class="s1">&#39;json&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-p<span class="o">=</span><span class="s1">&#39;[{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/primary&quot;, &quot;value&quot;: &quot;standby-cluster-1&quot;}]&#39;</span>
+<ol>
+<li>Opt in to PostgreSQL 18 <code>io_method=io_uring</code>. The operator also relaxes the PostgreSQL container seccomp profile using the operator-level Localhost profile.</li>
+</ol>
+<p>For the full field reference, see <a href="../preview/api-reference/#documentdbspec">DocumentDBSpec</a> in the API Reference.</p>
+<h2 id="seccomp-configuration">Seccomp configuration<a class="headerlink" href="#seccomp-configuration" title="Permanent link">&para;</a></h2>
+<p>Which Localhost seccomp profile the operator points the pods at is <strong>operator-level configuration</strong>, set through an environment variable on the operator deployment. The same profile applies to <strong>all</strong> DocumentDB clusters managed by that operator.</p>
+<table>
+<thead>
+<tr>
+<th>Environment variable</th>
+<th>Values</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DOCUMENTDB_IOURING_SECCOMP_PROFILE</code></td>
+<td>profile path</td>
+<td><code>profiles/documentdb-iouring.json</code></td>
+<td>Localhost profile path, relative to the node's kubelet seccomp root (<code>/var/lib/kubelet/seccomp</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>With the bundled Helm chart, set this through a first-class value (preferred):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>--install<span class="w"> </span>documentdb-operator<span class="w"> </span>&lt;chart&gt;<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--set<span class="w"> </span>operator.ioUring.seccompProfile<span class="o">=</span>profiles/documentdb-iouring.json
 </code></pre></div>
-<h2 id="application-considerations">Application Considerations<a class="headerlink" href="#application-considerations" title="Permanent link">&para;</a></h2>
-<h3 id="connection-handling">Connection Handling<a class="headerlink" href="#connection-handling" title="Permanent link">&para;</a></h3>
+<p>Leaving the value empty keeps the operator's built-in default
+(<code>profiles/documentdb-iouring.json</code>). For an already-installed operator you can patch
+the manager container env directly instead:</p>
+<div class="highlight"><span class="filename">operator-deployment.yaml (excerpt)</span><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="nt">containers</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-operator</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">          </span><span class="nt">env</span><span class="p">:</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOCUMENTDB_IOURING_SECCOMP_PROFILE</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">              </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;profiles/documentdb-iouring.json&quot;</span>
+</code></pre></div>
+<p>The operator points the PostgreSQL pods at a <strong>Localhost</strong> seccomp profile that re-allows only the three io_uring syscalls on top of the runtime default. This keeps the rest of the sandbox intact.</p>
+<p>The referenced profile JSON — the upstream <code>RuntimeDefault</code> profile <strong>plus</strong> <code>io_uring_setup</code>, <code>io_uring_enter</code>, and <code>io_uring_register</code> — <strong>must be pre-installed on every node that runs PostgreSQL pods</strong>, at the path resolved under <code>/var/lib/kubelet/seccomp</code>. If the profile is missing on a node, the pod scheduled there fails to start.</p>
+<p>The hands-on <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> provides the curated profile plus a kind <code>extraMount</code> and a DaemonSet installer that distribute it to every node.</p>
+<div class="admonition warning">
+<p class="admonition-title">Security trade-off</p>
+<p>Relaxing seccomp — even with the hardened Localhost profile that re-allows only the three io_uring syscalls — widens the kernel attack surface. io_uring has been a recurring kernel-exploit vector, so this is a trade-off you accept as the cluster operator. That is why the gate is opt-in and disabled by default.</p>
+</div>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Use the Kubernetes Service</strong> — always connect through the <a href="../../configuration/networking/#service-types">Kubernetes Service</a> (not directly to pod IPs). The Service automatically routes to the current primary.</li>
-<li><strong>Implement retry logic</strong> — during failover, all connections are briefly interrupted. Applications should retry with exponential backoff.</li>
+<li><strong>PostgreSQL 18 image.</strong> <code>io_method=io_uring</code> exists only in PostgreSQL 18 and later. Make sure the cluster runs a PG18 image.</li>
+<li><strong>A node kernel with io_uring enabled.</strong> io_uring must not be disabled at the kernel level — the <code>kernel.io_uring_disabled</code> sysctl must be <code>0</code> (the kernel default; <code>0</code> means <em>not disabled</em>, i.e. enabled), mirroring the <code>IOUring: true</code> gate you set on the cluster. Modern AKS, EKS, and GKE node images qualify.</li>
+<li><strong>The seccomp profile installed on nodes.</strong> The Localhost profile referenced by <code>DOCUMENTDB_IOURING_SECCOMP_PROFILE</code> must exist on every node that runs PostgreSQL pods. The <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> automates this.</li>
 </ul>
-<h3 id="behavior-during-failover">Behavior During Failover<a class="headerlink" href="#behavior-during-failover" title="Permanent link">&para;</a></h3>
-<p>During failover:
-- Existing connections to the old primary are dropped.
-- There is a brief period of downtime until the new primary is promoted and ready to accept connections.
-- Once the new primary is available, the Kubernetes Service routes traffic to it automatically.</p>
+<h2 id="verification">Verification<a class="headerlink" href="#verification" title="Permanent link">&para;</a></h2>
+<p>After enabling the gate and waiting for the rolling restart to finish, confirm io_uring is active.</p>
+<ol>
+<li>
+<p><strong>Check that the PostgreSQL pods are running</strong> (not CrashLooping):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>&lt;cluster-name&gt;
+</code></pre></div>
+</li>
+<li>
+<p><strong>Confirm <code>io_method</code> is <code>io_uring</code></strong> by connecting to PostgreSQL:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>postgres<span class="w"> </span>--<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SHOW io_method;&quot;</span>
+</code></pre></div>
+<p>Expected output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a> io_method
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>-----------
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a> io_uring
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>(1 row)
+</code></pre></div>
+</li>
+<li>
+<p><strong>Inspect the pod's seccomp profile</strong> to confirm the operator relaxed it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pod<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.spec.securityContext.seccompProfile}&#39;</span>
+</code></pre></div>
+<p>This shows <code>{"type":"Localhost","localhostProfile":"profiles/documentdb-iouring.json"}</code>.</p>
+</li>
+<li>
+<p><strong>Confirm reads are flowing through the I/O path</strong> with <code>pg_stat_io</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>postgres<span class="w"> </span>--<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT backend_type, object, context, reads FROM pg_stat_io WHERE reads &gt; 0;&quot;</span>
+</code></pre></div>
+</li>
+</ol>
+<h2 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h2>
+<p>io_uring's measured benefit is primarily <strong>tail-latency stability on I/O-bound scans</strong>, not raw throughput. On Azure Premium SSD at low concurrency, <code>io_method=io_uring</code> delivers lower, more predictable p95/p99 latency on heavy range scans and reduces in-engine read-wait time, while point lookups and aggregate throughput are largely unchanged.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="postgresql-crashloops-with-could-not-setup-io_uring-queue">PostgreSQL CrashLoops with "could not setup io_uring queue"<a class="headerlink" href="#postgresql-crashloops-with-could-not-setup-io_uring-queue" title="Permanent link">&para;</a></h3>
+<p>If a PostgreSQL pod restarts repeatedly and its logs show:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>FATAL: could not setup io_uring queue: Operation not permitted
+</code></pre></div>
+<p>the seccomp profile wasn't relaxed for that pod. Check, in order:</p>
+<ul>
+<li><strong>Profile not installed on the node.</strong> The profile JSON is missing on the node where the pod is scheduled. Install it on every node that runs PostgreSQL pods — the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> DaemonSet handles this.</li>
+<li><strong>Wrong profile path.</strong> <code>DOCUMENTDB_IOURING_SECCOMP_PROFILE</code> doesn't match the actual file path under <code>/var/lib/kubelet/seccomp</code> on the node. Align the env var with the installed file.</li>
+<li><strong>Operator not restarted.</strong> The profile env var changed but the operator deployment wasn't rolled, so new clusters still reference the old path. Verify the pod's seccomp profile with the <a href="#verification">verification</a> command above.</li>
+</ul>
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../postgresql-tuning/">PostgreSQL parameter tuning</a> — how protected parameters such as <code>io_method</code> are managed</li>
+<li><a href="../preview/api-reference/#documentdbspec">API Reference: DocumentDBSpec</a> — the <code>featureGates</code> field</li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> — kind <code>extraMount</code>, DaemonSet installer, and curated profile</li>
+</ul>
 
 
 
@@ -1717,10 +1831,10 @@
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      <script src="../assets/javascripts/bundle.dd8806f2.min.js"></script>
       
     
   </body>
