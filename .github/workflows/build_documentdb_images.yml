@@ -1,8 +1,9 @@
 name: RELEASE - Build DocumentDB Candidate Images
 
-# Builds documentdb extension and gateway images from public DocumentDB release artifacts.
-# - documentdb image: public deb13 PostgreSQL 18 extension package
+# Builds DocumentDB extension and gateway images from released DocumentDB sources.
+# - documentdb image: self-built Debian 13 PostgreSQL 18 extension package
 # - gateway image: public documentdb-local image payload
+# The extension package is also published as a signed OCI artifact in GHCR.
 # These images follow the DATABASE version track (documentDbVersion in values.yaml).
 # For operator/sidecar images, see build_operator_images.yml.
 
@@ -10,13 +11,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Released DocumentDB version to package (for example 0.113.0)'
+        description: 'Released DocumentDB version to package (for example 0.116.0)'
         required: false
-        default: '0.113.0'
-      documentdb_extension_github_repo:
-        description: 'GitHub owner/repo for DocumentDB extension releases'
+        default: '0.116.0'
+      documentdb_source_github_repo:
+        description: 'GitHub owner/repo containing the DocumentDB source'
         required: false
         default: 'documentdb/documentdb'
+      documentdb_source_ref:
+        description: 'Optional DocumentDB source tag or branch (defaults to the release tag)'
+        required: false
+        default: ''
       documentdb_gateway_image_repo:
         description: 'Container image repo for gateway source (without tag)'
         required: false
@@ -26,32 +31,34 @@ on:
     types: [documentdb-release]
 
 permissions:
-  packages: write
   contents: read
-  id-token: write
 
 env:
-
-  DEFAULT_DOCUMENTDB_VERSION: '0.113.0'
-  DOCUMENTDB_EXTENSION_GITHUB_REPO: ${{ github.event.inputs.documentdb_extension_github_repo || 'documentdb/documentdb' }}
+  DEFAULT_DOCUMENTDB_VERSION: '0.116.0'
+  DOCUMENTDB_SOURCE_GITHUB_REPO: ${{ github.event.inputs.documentdb_source_github_repo || 'documentdb/documentdb' }}
   DOCUMENTDB_GATEWAY_IMAGE_REPO: ${{ github.event.inputs.documentdb_gateway_image_repo || 'ghcr.io/documentdb/documentdb/documentdb-local' }}
-
+  DOCUMENTDB_DEB_REPOSITORY: ghcr.io/${{ github.repository }}/documentdb-deb13
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Resolve public release artifacts
+  # Resolve and pin released DocumentDB sources
   # ---------------------------------------------------------------------------
-  resolve-public-artifacts:
-    name: Resolve Public DocumentDB Sources
+  resolve-sources:
+    name: Resolve DocumentDB Sources
     runs-on: ubuntu-22.04
     outputs:
       documentdb_version: ${{ steps.version.outputs.documentdb_version }}
       documentdb_version_dash: ${{ steps.version.outputs.documentdb_version_dash }}
       image_tag: ${{ steps.version.outputs.image_tag }}
+      source_ref: ${{ steps.version.outputs.source_ref }}
+      source_sha: ${{ steps.source.outputs.source_sha }}
       gateway_source_image: ${{ steps.version.outputs.gateway_source_image }}
     steps:
     - name: Resolve released DocumentDB version
       id: version
+      env:
+        DOCUMENTDB_SOURCE_REF_INPUT: ${{ github.event.inputs.documentdb_source_ref }}
+      shell: bash
       run: |
         set -euo pipefail
         RAW_VERSION="${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
@@ -61,48 +68,291 @@ jobs:
           VERSION="$RAW_VERSION"
         fi
         if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Version must use dotted semver format (for example 0.113.0), got: $RAW_VERSION" >&2
+          echo "Version must use dotted semver format (for example 0.116.0), got: $RAW_VERSION" >&2
           exit 1
         fi
+
         VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
+        SOURCE_REF="$DOCUMENTDB_SOURCE_REF_INPUT"
+        SOURCE_REF="${SOURCE_REF:-v${VERSION_DASH}}"
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
         GATEWAY_SOURCE_IMAGE="${{ env.DOCUMENTDB_GATEWAY_IMAGE_REPO }}:pg17-${VERSION}"
+
         {
           echo "documentdb_version=$VERSION"
           echo "documentdb_version_dash=$VERSION_DASH"
           echo "image_tag=$IMAGE_TAG"
+          echo "source_ref=$SOURCE_REF"
           echo "gateway_source_image=$GATEWAY_SOURCE_IMAGE"
         } >> "$GITHUB_OUTPUT"
+
         echo "DocumentDB version: $VERSION"
-        echo "Release tag: v$VERSION_DASH"
+        echo "DocumentDB source: ${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}@$SOURCE_REF"
         echo "Candidate image tag: $IMAGE_TAG"
         echo "Gateway source image: $GATEWAY_SOURCE_IMAGE"
 
-    - name: Verify public extension release assets
+    - name: Resolve source ref to immutable commit
+      id: source
       env:
-        VERSION_DASH: ${{ steps.version.outputs.documentdb_version_dash }}
+        SOURCE_REF: ${{ steps.version.outputs.source_ref }}
+      shell: bash
       run: |
         set -euo pipefail
-        for ARCH in amd64 arm64; do
-          ASSET_URL="https://github.com/${{ env.DOCUMENTDB_EXTENSION_GITHUB_REPO }}/releases/download/v${VERSION_DASH}/deb13-postgresql-18-documentdb_${VERSION_DASH}_${ARCH}.deb"
-          echo "Checking $ASSET_URL"
-          curl -fsI -L "$ASSET_URL" >/dev/null
-        done
+        REMOTE="https://github.com/${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}.git"
+        REFS=$(git ls-remote "$REMOTE" \
+          "$SOURCE_REF" \
+          "refs/heads/$SOURCE_REF" \
+          "refs/tags/$SOURCE_REF" \
+          "refs/tags/$SOURCE_REF^{}")
+        PEELED_SHA=$(echo "$REFS" | awk '$2 ~ /\^\{\}$/ { print $1; exit }')
+        DIRECT_SHA=$(echo "$REFS" | awk 'NR == 1 { print $1 }')
+        SOURCE_SHA="${PEELED_SHA:-$DIRECT_SHA}"
+        if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "Unable to resolve ${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}@$SOURCE_REF to a commit" >&2
+          exit 1
+        fi
+        echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+        echo "Pinned DocumentDB source commit: $SOURCE_SHA"
 
     - name: Verify public gateway source image
       env:
         SOURCE_IMAGE: ${{ steps.version.outputs.gateway_source_image }}
+      run: docker manifest inspect "$SOURCE_IMAGE" >/dev/null
+
+  # ---------------------------------------------------------------------------
+  # Build Debian 13 PG18 extension packages on native runners
+  # ---------------------------------------------------------------------------
+  build-extension-packages:
+    name: Build DocumentDB Debian Package (${{ matrix.arch }})
+    needs: [resolve-sources]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout pinned DocumentDB source
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}
+        ref: ${{ needs.resolve-sources.outputs.source_sha }}
+        path: documentdb-source
+        persist-credentials: false
+
+    - name: Build Debian 13 PostgreSQL 18 package
+      working-directory: documentdb-source
+      env:
+        DOCUMENTDB_VERSION: ${{ needs.resolve-sources.outputs.documentdb_version }}
+      shell: bash
       run: |
         set -euo pipefail
-        docker manifest inspect "$SOURCE_IMAGE" >/dev/null
+        BUILD_ARGS=(
+          --os deb13
+          --pg 18
+          --version "$DOCUMENTDB_VERSION"
+          --output-dir packages
+        )
+        if grep -q -- '--no-dbgsym' packaging/build_packages.sh; then
+          BUILD_ARGS+=(--no-dbgsym)
+        fi
+        ./packaging/build_packages.sh "${BUILD_ARGS[@]}"
+
+    - name: Validate and stage package bundle
+      working-directory: documentdb-source
+      env:
+        DOCUMENTDB_VERSION: ${{ needs.resolve-sources.outputs.documentdb_version }}
+        DOCUMENTDB_VERSION_DASH: ${{ needs.resolve-sources.outputs.documentdb_version_dash }}
+        DOCUMENTDB_SOURCE_REF: ${{ needs.resolve-sources.outputs.source_ref }}
+        DOCUMENTDB_SOURCE_SHA: ${{ needs.resolve-sources.outputs.source_sha }}
+        EXPECTED_ARCH: ${{ matrix.arch }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        DEB_FILE="packages/deb13-postgresql-18-documentdb_${DOCUMENTDB_VERSION_DASH}_${EXPECTED_ARCH}.deb"
+        if [[ ! -f "$DEB_FILE" ]]; then
+          echo "Expected package was not produced: $DEB_FILE" >&2
+          find packages -maxdepth 1 -type f -printf '%f\n' >&2
+          exit 1
+        fi
+
+        PACKAGE_NAME=$(dpkg-deb -f "$DEB_FILE" Package)
+        PACKAGE_VERSION=$(dpkg-deb -f "$DEB_FILE" Version)
+        PACKAGE_ARCH=$(dpkg-deb -f "$DEB_FILE" Architecture)
+        [[ "$PACKAGE_NAME" == "postgresql-18-documentdb" ]] || {
+          echo "Unexpected package name: $PACKAGE_NAME" >&2
+          exit 1
+        }
+        [[ "$PACKAGE_VERSION" == "$DOCUMENTDB_VERSION_DASH" ]] || {
+          echo "Unexpected package version: $PACKAGE_VERSION" >&2
+          exit 1
+        }
+        [[ "$PACKAGE_ARCH" == "$EXPECTED_ARCH" ]] || {
+          echo "Unexpected package architecture: $PACKAGE_ARCH" >&2
+          exit 1
+        }
+
+        mkdir -p package-output
+        cp "$DEB_FILE" package-output/
+        cp LICENSE NOTICE package-output/
+        (
+          cd package-output
+          sha256sum "$(basename "$DEB_FILE")" > SHA256SUMS
+        )
+        jq -n \
+          --arg schemaVersion "1" \
+          --arg documentdbVersion "$DOCUMENTDB_VERSION" \
+          --arg packageVersion "$PACKAGE_VERSION" \
+          --arg packageName "$PACKAGE_NAME" \
+          --arg os "debian13" \
+          --arg postgresMajor "18" \
+          --arg architecture "$PACKAGE_ARCH" \
+          --arg sourceRepository "${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}" \
+          --arg sourceRef "$DOCUMENTDB_SOURCE_REF" \
+          --arg sourceCommit "$DOCUMENTDB_SOURCE_SHA" \
+          --arg workflowRepository "$GITHUB_REPOSITORY" \
+          --arg workflowRunId "$GITHUB_RUN_ID" \
+          '{
+            schemaVersion: $schemaVersion,
+            documentdbVersion: $documentdbVersion,
+            package: {
+              name: $packageName,
+              version: $packageVersion,
+              os: $os,
+              postgresMajor: $postgresMajor,
+              architecture: $architecture
+            },
+            source: {
+              repository: $sourceRepository,
+              ref: $sourceRef,
+              commit: $sourceCommit
+            },
+            build: {
+              repository: $workflowRepository,
+              runId: $workflowRunId
+            }
+          }' > package-output/build-metadata.json
+
+        echo "Validated $DEB_FILE"
+        cat package-output/SHA256SUMS
+        cat package-output/build-metadata.json
+
+    - name: Upload package bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentdb-deb13-pg18-${{ matrix.arch }}
+        path: documentdb-source/package-output/*
+        retention-days: 7
+        if-no-files-found: error
+        compression-level: 0
+
+  # ---------------------------------------------------------------------------
+  # Publish and sign the package bundles as GHCR OCI artifacts
+  # ---------------------------------------------------------------------------
+  publish-extension-packages:
+    name: Publish DocumentDB Debian Package (${{ matrix.arch }})
+    needs: [resolve-sources, build-extension-packages]
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      PACKAGE_TAG: ${{ needs.resolve-sources.outputs.image_tag }}-pg18-${{ matrix.arch }}
+    steps:
+    - name: Download package bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: documentdb-deb13-pg18-${{ matrix.arch }}
+        path: package-bundle
+
+    - name: Verify package bundle
+      working-directory: package-bundle
+      shell: bash
+      run: |
+        set -euo pipefail
+        sha256sum -c SHA256SUMS
+        DEB_FILE=$(find . -maxdepth 1 -type f -name '*.deb' -printf '%f\n')
+        [[ $(echo "$DEB_FILE" | wc -l) -eq 1 ]] || {
+          echo "Expected exactly one Debian package" >&2
+          exit 1
+        }
+        [[ $(dpkg-deb -f "$DEB_FILE" Architecture) == "${{ matrix.arch }}" ]]
+
+    - name: Install ORAS
+      uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+      with:
+        version: 1.3.4
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3.8.2
+
+    - name: Login to GHCR
+      shell: bash
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+    - name: Publish package OCI artifact
+      working-directory: package-bundle
+      shell: bash
+      run: |
+        set -euo pipefail
+        DEB_FILE=$(find . -maxdepth 1 -type f -name '*.deb' -printf '%f\n')
+        PACKAGE_REF="${{ env.DOCUMENTDB_DEB_REPOSITORY }}:${PACKAGE_TAG}"
+        oras push "$PACKAGE_REF" \
+          --artifact-type application/vnd.documentdb.debian-package.v1 \
+          "$DEB_FILE:application/vnd.debian.binary-package" \
+          "SHA256SUMS:text/plain" \
+          "build-metadata.json:application/vnd.documentdb.build-metadata.v1+json" \
+          "LICENSE:text/plain" \
+          "NOTICE:text/plain"
+
+        PACKAGE_DIGEST=$(oras resolve "$PACKAGE_REF")
+        echo "PACKAGE_DIGEST=$PACKAGE_DIGEST" >> "$GITHUB_ENV"
+        echo "Published $PACKAGE_REF@$PACKAGE_DIGEST"
+
+    - name: Sign package OCI artifact
+      shell: bash
+      run: cosign sign "${{ env.DOCUMENTDB_DEB_REPOSITORY }}@${PACKAGE_DIGEST}" -y
+
+    - name: Verify package signature and contents
+      shell: bash
+      run: |
+        set -euo pipefail
+        PACKAGE_REF="${{ env.DOCUMENTDB_DEB_REPOSITORY }}@${PACKAGE_DIGEST}"
+        cosign verify \
+          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          "$PACKAGE_REF"
+
+        mkdir package-verification
+        oras pull "$PACKAGE_REF" --output package-verification
+        (
+          cd package-verification
+          sha256sum -c SHA256SUMS
+          DEB_FILE=$(find . -maxdepth 1 -type f -name '*.deb' -printf '%f\n')
+          [[ $(dpkg-deb -f "$DEB_FILE" Package) == "postgresql-18-documentdb" ]]
+          [[ $(dpkg-deb -f "$DEB_FILE" Version) == "${{ needs.resolve-sources.outputs.documentdb_version_dash }}" ]]
+          [[ $(dpkg-deb -f "$DEB_FILE" Architecture) == "${{ matrix.arch }}" ]]
+        )
 
   # ---------------------------------------------------------------------------
   # Build and push documentdb + gateway images (per-arch)
   # ---------------------------------------------------------------------------
   build-and-push:
     name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
-    needs: [resolve-public-artifacts]
+    needs: [resolve-sources, publish-extension-packages]
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -117,51 +367,84 @@ jobs:
           - arch: arm64
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
     env:
-      IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
+      IMAGE_TAG: ${{ needs.resolve-sources.outputs.image_tag }}
+      PACKAGE_TAG: ${{ needs.resolve-sources.outputs.image_tag }}-pg18-${{ matrix.arch }}
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         persist-credentials: false
 
-    - name: Download public extension package
+    - name: Install ORAS
       if: matrix.image.name == 'documentdb'
-      run: |
-        set -euo pipefail
-        mkdir -p packages
-        DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
-        ASSET_URL="https://github.com/${{ env.DOCUMENTDB_EXTENSION_GITHUB_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/${DEB_FILE}"
-        curl -fsSL -o "packages/${DEB_FILE}" -L "$ASSET_URL"
-        ls -lh packages/
+      uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+      with:
+        version: 1.3.4
+
+    - name: Install cosign
+      if: matrix.image.name == 'documentdb'
+      uses: sigstore/cosign-installer@v3.8.2
 
     - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      shell: bash
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-    - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+    - name: Download extension package from GHCR
+      if: matrix.image.name == 'documentdb'
+      shell: bash
       run: |
         set -euo pipefail
-        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
-        IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
+        mkdir packages
+        PACKAGE_REF="${{ env.DOCUMENTDB_DEB_REPOSITORY }}:${PACKAGE_TAG}"
+        PACKAGE_DIGEST=$(oras resolve "$PACKAGE_REF")
+        cosign verify \
+          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          "${{ env.DOCUMENTDB_DEB_REPOSITORY }}@${PACKAGE_DIGEST}"
+        oras pull "${{ env.DOCUMENTDB_DEB_REPOSITORY }}@${PACKAGE_DIGEST}" --output packages
+        (
+          cd packages
+          sha256sum -c SHA256SUMS
+          DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-sources.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
+          [[ -f "$DEB_FILE" ]]
+          [[ $(dpkg-deb -f "$DEB_FILE" Package) == "postgresql-18-documentdb" ]]
+          [[ $(dpkg-deb -f "$DEB_FILE" Version) == "${{ needs.resolve-sources.outputs.documentdb_version_dash }}" ]]
+          [[ $(dpkg-deb -f "$DEB_FILE" Architecture) == "${{ matrix.arch }}" ]]
+        )
 
-        BUILD_ARGS=""
+    - name: Build and push ${{ matrix.image.name }} image
+      shell: bash
+      run: |
+        set -euo pipefail
+        TAG="${IMAGE_TAG}-${{ matrix.arch }}"
+        IMAGE="ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG"
+        BUILD_ARGS=()
 
         case "${{ matrix.image.name }}" in
           documentdb)
-            DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
-            echo "Using deb: $DEB_FILE"
-            BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
+            DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-sources.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
+            echo "Using self-built Debian package: $DEB_FILE"
+            BUILD_ARGS=(
+              --build-arg "PG_MAJOR=18"
+              --build-arg "DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
+            )
             ;;
           gateway)
-            echo "Using public gateway source image: ${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
-            BUILD_ARGS="--build-arg SOURCE_IMAGE=${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
+            echo "Using public gateway source image: ${{ needs.resolve-sources.outputs.gateway_source_image }}"
+            BUILD_ARGS=(
+              --build-arg "SOURCE_IMAGE=${{ needs.resolve-sources.outputs.gateway_source_image }}"
+            )
             ;;
         esac
 
-        docker build --pull $BUILD_ARGS \
-          -t $IMAGE \
-          -f ${{ matrix.image.dockerfile }} .
-        docker push $IMAGE
+        docker build --pull "${BUILD_ARGS[@]}" \
+          -t "$IMAGE" \
+          -f "${{ matrix.image.dockerfile }}" .
+        docker push "$IMAGE"
 
   # ---------------------------------------------------------------------------
   # Create multi-arch manifests, sign, and verify
@@ -172,38 +455,47 @@ jobs:
       matrix:
         image: [documentdb, gateway]
     runs-on: ubuntu-22.04
-    needs: [resolve-public-artifacts, build-and-push]
+    needs: [resolve-sources, build-and-push]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     env:
-      IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
+      IMAGE_TAG: ${{ needs.resolve-sources.outputs.image_tag }}
     steps:
     - name: Login to GHCR
-      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-    - name: Create and Push Manifest
+    - name: Create and push manifest
+      shell: bash
       run: |
-        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
-          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
-        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+        set -euo pipefail
+        docker manifest create "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}" \
+          --amend "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}-amd64" \
+          --amend "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}-arm64"
+        docker manifest push "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}"
 
     - name: Install cosign
       uses: sigstore/cosign-installer@v3.8.2
 
-    - name: Sign manifest (keyless)
+    - name: Sign manifest
+      shell: bash
       run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+        set -euo pipefail
+        DIGEST=$(docker buildx imagetools inspect "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}" \
           | awk '/^Digest:/ { print $2 }')
-        echo "Signing manifest-list@${DIGEST}"
-        cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
+        cosign sign "ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}" -y
 
-    - name: Verify manifest signature (keyless)
+    - name: Verify manifest signature
+      shell: bash
       run: |
-        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+        set -euo pipefail
+        DIGEST=$(docker buildx imagetools inspect "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}" \
           | awk '/^Digest:/ { print $2 }')
         cosign verify \
           --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-          ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
+          "ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}"
 
   # ---------------------------------------------------------------------------
   # Summary
@@ -211,21 +503,24 @@ jobs:
   summary:
     name: Build Summary
     runs-on: ubuntu-22.04
-    needs: [resolve-public-artifacts, create-manifest]
+    needs: [resolve-sources, publish-extension-packages, create-manifest]
     if: always()
     steps:
     - name: Summary
+      shell: bash
       run: |
         {
           echo "## DocumentDB Image Build Summary"
           echo ""
-          echo "- **DocumentDB Version**: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`"
-          echo "- **Candidate Image Tag**: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`"
-          echo "- **Extension Package Source**: \`https://github.com/${{ env.DOCUMENTDB_EXTENSION_GITHUB_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_{amd64,arm64}.deb\`"
-          echo "- **Gateway Source Image**: \`${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}\`"
+          echo "- **DocumentDB Version**: \`${{ needs.resolve-sources.outputs.documentdb_version }}\`"
+          echo "- **DocumentDB Source**: \`${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}@${{ needs.resolve-sources.outputs.source_ref }}\`"
+          echo "- **Pinned Source Commit**: \`${{ needs.resolve-sources.outputs.source_sha }}\`"
+          echo "- **Candidate Image Tag**: \`${{ needs.resolve-sources.outputs.image_tag }}\`"
+          echo "- **Debian Package Artifacts**: \`${{ env.DOCUMENTDB_DEB_REPOSITORY }}:${{ needs.resolve-sources.outputs.image_tag }}-pg18-{amd64,arm64}\`"
+          echo "- **Gateway Source Image**: \`${{ needs.resolve-sources.outputs.gateway_source_image }}\`"
           echo "- **Images**: documentdb, gateway"
           echo ""
-          echo "To release these images, run \`release_documentdb_images.yml\` with:"
-          echo "- candidate_version: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`"
-          echo "- version: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`"
+          echo "To release these images and package artifacts, run \`release_documentdb_images.yml\` with:"
+          echo "- candidate_version: \`${{ needs.resolve-sources.outputs.image_tag }}\`"
+          echo "- version: \`${{ needs.resolve-sources.outputs.documentdb_version }}\`"
         } >> "$GITHUB_STEP_SUMMARY"

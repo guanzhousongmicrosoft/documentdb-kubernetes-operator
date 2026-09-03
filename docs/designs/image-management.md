@@ -199,7 +199,7 @@ Builds operator and sidecar images from this repo's Go source.
 
 ### Database Image Build (`build_documentdb_images.yml`)
 
-Builds documentdb extension and gateway images from public DocumentDB release artifacts.
+Builds documentdb extension and gateway images from released DocumentDB source.
 
 | Aspect | Details |
 |--------|---------|
@@ -207,17 +207,19 @@ Builds documentdb extension and gateway images from public DocumentDB release ar
 | **Images** | documentdb, gateway |
 | **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_public_image` |
 | **Tag pattern** | `{documentdb_version}-build-{run_id}-{attempt}-{sha}` (candidate) |
-| **Build time** | ~5 minutes (public artifact download + image build) |
+| **Build time** | ~15 minutes (native package builds + image builds) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
-| **Signing** | cosign keyless (OIDC) |
-| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.113.0`) |
+| **Signing** | cosign keyless (package OCI artifacts and image manifests) |
+| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.116.0`) |
 
 The build process:
-1. Resolves the released DocumentDB version to package
-2. Downloads the public `deb13` PostgreSQL 18 extension package from `documentdb/documentdb` release assets
-3. Verifies the public multi-arch `documentdb-local:pg17-<version>` image exists
-4. Builds `Dockerfile_extension` using the public extension `.deb` (installs pg_cron, pgvector, postgis alongside)
-5. Builds `Dockerfile_gateway_public_image` by copying the gateway binary and runtime files from the public upstream image
+1. Resolves the released DocumentDB version and source ref to an immutable commit
+2. Builds Debian 13 PostgreSQL 18 extension packages on native amd64 and arm64 runners
+3. Validates the package name, version, architecture, and checksum
+4. Publishes the package, checksum, build metadata, LICENSE, and NOTICE as signed OCI artifacts under `documentdb-deb13`
+5. Verifies and pulls those exact GHCR artifacts to build `Dockerfile_extension` (which also installs pg_cron, pgvector, and postgis)
+6. Verifies the public multi-arch `documentdb-local:pg17-<version>` image and builds `Dockerfile_gateway_public_image` from its gateway payload
+7. Creates and signs the multi-architecture extension and gateway image manifests
 
 ### Dockerfile Details
 

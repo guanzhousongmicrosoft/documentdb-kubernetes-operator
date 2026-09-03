@@ -7,7 +7,7 @@ It covers two independent image tracks — pick whichever you actually changed:
 | Track | What it ships | Repo to fork & build from | Workflow to run |
 |---|---|---|---|
 | **Operator track** | `operator`, `sidecar` | This repo (`documentdb/documentdb-kubernetes-operator`) | [`RELEASE - Build Operator Candidate Images`](../../.github/workflows/build_operator_images.yml) |
-| **Database track** | `documentdb` (extension), `gateway` | Upstream [`documentdb/documentdb`](https://github.com/documentdb/documentdb) **then** this repo | DocumentDB release pipeline → [`RELEASE - Build DocumentDB Candidate Images`](../../.github/workflows/build_documentdb_images.yml) |
+| **Database track** | `documentdb` (extension), `gateway` | Upstream [`documentdb/documentdb`](https://github.com/documentdb/documentdb) source **then** this repo | [`RELEASE - Build DocumentDB Candidate Images`](../../.github/workflows/build_documentdb_images.yml) |
 
 If your change is purely Go controller code, skip Step 1 entirely and use the upstream `0.110.0` (or any released) database images.
 
@@ -24,31 +24,38 @@ If your change is purely Go controller code, skip Step 1 entirely and use the up
 
 ---
 
-## Step 1 — (Database track only) Build extension + gateway from a documentdb fork
+## Step 1 — (Database track only) Build extension + gateway from DocumentDB source
 
 Skip this step if you don't need to change the DocumentDB extension or gateway.
 
-1. **Fork** [`documentdb/documentdb`](https://github.com/documentdb/documentdb) and push your changes.
-2. **Run the DocumentDB release pipeline** on your fork (typically `Release` workflow). This must publish:
-    - A GitHub release named `v<MAJOR>.<MINOR>-<PATCH>` (note the dash before patch — for example `v0.110-0`).
-    - Per-arch `.deb` assets attached to that release: `deb13-postgresql-18-documentdb_<MAJOR>.<MINOR>-<PATCH>_amd64.deb` and `_arm64.deb`.
-    - A `documentdb-local` GHCR image: `ghcr.io/<your-gh-user>/documentdb/documentdb-local:pg17-<MAJOR>.<MINOR>.<PATCH>`.
-
-    The operator-side workflow probes for these exact paths in [its verify steps](../../.github/workflows/build_documentdb_images.yml) (`Verify public extension release assets` and `Verify public gateway source image`).
-
-3. **In your operator fork**, run **Actions → `RELEASE - Build DocumentDB Candidate Images` → Run workflow**. Provide these inputs:
-    - `version`: `0.110.0` (or whatever you released in step 2)
-    - `documentdb_extension_github_repo`: `<your-gh-user>/documentdb`
+1. For a released upstream version, no DocumentDB fork is required. For unreleased database changes, fork [`documentdb/documentdb`](https://github.com/documentdb/documentdb) and push the source branch you want to test.
+2. **In your operator fork**, run **Actions → `RELEASE - Build DocumentDB Candidate Images` → Run workflow**. Provide these inputs:
+    - `version`: `0.116.0` (or the version declared by your source)
+    - `documentdb_source_github_repo`: `documentdb/documentdb`, or `<your-gh-user>/documentdb` for custom source
+    - `documentdb_source_ref`: leave empty to use the release tag derived from `version`, or provide your custom source branch/tag
     - `documentdb_gateway_image_repo`: `ghcr.io/<your-gh-user>/documentdb/documentdb-local`
 
-4. After the run finishes, your fork has the candidate tag (and per-arch variants):
+    The workflow resolves the source ref to an immutable commit, builds the
+    Debian 13 / PostgreSQL 18 extension packages on native amd64 and arm64
+    runners, signs and stores them as OCI artifacts in your fork's GHCR, then
+    uses those exact artifacts to build the extension images. The gateway still
+    uses the selected `documentdb-local` source image.
+
+3. After the run finishes, your fork has the candidate image tag (and per-arch variants):
 
     ```text
     ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/documentdb:<version>-build-<run_id>-<attempt>-<sha>
     ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/gateway:<version>-build-<run_id>-<attempt>-<sha>
     ```
 
-    The workflow only publishes this computed `image_tag` (printed at the top of the run summary as `candidate_version`); it does **not** retag to the bare `<version>`. The bare-version retag is performed by [`release_documentdb_images.yml`](../../.github/workflows/release_documentdb_images.yml), which is the GA promotion path and should not be run for fork testing. Use the candidate tag from the run summary directly in Step 3.
+    It also publishes:
+
+    ```text
+    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/documentdb-deb13:<candidate>-pg18-amd64
+    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/documentdb-deb13:<candidate>-pg18-arm64
+    ```
+
+    The workflow only publishes the computed candidate tag (printed in the run summary); it does **not** retag to the bare `<version>`. The stable image and package tags are created by [`release_documentdb_images.yml`](../../.github/workflows/release_documentdb_images.yml), which is the GA promotion path and should not be run for fork testing. Use the candidate image tag from the run summary directly in Step 3.
 
 ---
 
