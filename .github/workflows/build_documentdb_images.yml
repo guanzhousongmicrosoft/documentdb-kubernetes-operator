@@ -12,8 +12,7 @@ on:
     inputs:
       version:
         description: 'Released DocumentDB version to package (for example 0.116.0)'
-        required: false
-        default: '0.116.0'
+        required: true
       documentdb_source_github_repo:
         description: 'GitHub owner/repo containing the DocumentDB source'
         required: false
@@ -34,7 +33,6 @@ permissions:
   contents: read
 
 env:
-  DEFAULT_DOCUMENTDB_VERSION: '0.116.0'
   DOCUMENTDB_SOURCE_GITHUB_REPO: ${{ github.event.inputs.documentdb_source_github_repo || 'documentdb/documentdb' }}
   DOCUMENTDB_GATEWAY_IMAGE_REPO: ${{ github.event.inputs.documentdb_gateway_image_repo || 'ghcr.io/documentdb/documentdb/documentdb-local' }}
   DOCUMENTDB_DEB_REPOSITORY: ghcr.io/${{ github.repository }}/documentdb-deb13
@@ -57,11 +55,16 @@ jobs:
     - name: Resolve released DocumentDB version
       id: version
       env:
+        DOCUMENTDB_VERSION_INPUT: ${{ github.event.inputs.version || github.event.client_payload.version }}
         DOCUMENTDB_SOURCE_REF_INPUT: ${{ github.event.inputs.documentdb_source_ref }}
       shell: bash
       run: |
         set -euo pipefail
-        RAW_VERSION="${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
+        RAW_VERSION="$DOCUMENTDB_VERSION_INPUT"
+        if [[ -z "$RAW_VERSION" ]]; then
+          echo "DocumentDB version is required" >&2
+          exit 1
+        fi
         if [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
           VERSION="${RAW_VERSION/-/.}"
         else
@@ -71,13 +74,17 @@ jobs:
           echo "Version must use dotted semver format (for example 0.116.0), got: $RAW_VERSION" >&2
           exit 1
         fi
+        if [[ ! "$DOCUMENTDB_SOURCE_GITHUB_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+          echo "DocumentDB source repository must use owner/repo format, got: $DOCUMENTDB_SOURCE_GITHUB_REPO" >&2
+          exit 1
+        fi
 
         VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
         SOURCE_REF="$DOCUMENTDB_SOURCE_REF_INPUT"
         SOURCE_REF="${SOURCE_REF:-v${VERSION_DASH}}"
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
-        GATEWAY_SOURCE_IMAGE="${{ env.DOCUMENTDB_GATEWAY_IMAGE_REPO }}:pg17-${VERSION}"
+        GATEWAY_SOURCE_IMAGE="${DOCUMENTDB_GATEWAY_IMAGE_REPO}:pg17-${VERSION}"
 
         {
           echo "documentdb_version=$VERSION"
@@ -88,7 +95,7 @@ jobs:
         } >> "$GITHUB_OUTPUT"
 
         echo "DocumentDB version: $VERSION"
-        echo "DocumentDB source: ${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}@$SOURCE_REF"
+        echo "DocumentDB source: $DOCUMENTDB_SOURCE_GITHUB_REPO@$SOURCE_REF"
         echo "Candidate image tag: $IMAGE_TAG"
         echo "Gateway source image: $GATEWAY_SOURCE_IMAGE"
 
@@ -99,7 +106,7 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        REMOTE="https://github.com/${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}.git"
+        REMOTE="https://github.com/${DOCUMENTDB_SOURCE_GITHUB_REPO}.git"
         REFS=$(git ls-remote "$REMOTE" \
           "$SOURCE_REF" \
           "refs/heads/$SOURCE_REF" \
@@ -109,7 +116,7 @@ jobs:
         DIRECT_SHA=$(echo "$REFS" | awk 'NR == 1 { print $1 }')
         SOURCE_SHA="${PEELED_SHA:-$DIRECT_SHA}"
         if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-          echo "Unable to resolve ${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}@$SOURCE_REF to a commit" >&2
+          echo "Unable to resolve $DOCUMENTDB_SOURCE_GITHUB_REPO@$SOURCE_REF to a commit" >&2
           exit 1
         fi
         echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
@@ -147,6 +154,20 @@ jobs:
         ref: ${{ needs.resolve-sources.outputs.source_sha }}
         path: documentdb-source
         persist-credentials: false
+
+    - name: Verify source version
+      working-directory: documentdb-source
+      env:
+        EXPECTED_VERSION: ${{ needs.resolve-sources.outputs.documentdb_version_dash }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        CONTROL_FILE="pg_documentdb_core/documentdb_core.control"
+        SOURCE_VERSION=$(sed -nE "s/^default_version[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p" "$CONTROL_FILE")
+        if [[ "$SOURCE_VERSION" != "$EXPECTED_VERSION" ]]; then
+          echo "DocumentDB source declares version '$SOURCE_VERSION', expected '$EXPECTED_VERSION'" >&2
+          exit 1
+        fi
 
     - name: Build Debian 13 PostgreSQL 18 package
       working-directory: documentdb-source
@@ -202,6 +223,12 @@ jobs:
 
         mkdir -p package-output
         cp "$DEB_FILE" package-output/
+        for LEGAL_FILE in LICENSE NOTICE; do
+          if [[ ! -f "$LEGAL_FILE" ]]; then
+            echo "DocumentDB source is missing required legal file: $LEGAL_FILE" >&2
+            exit 1
+          fi
+        done
         cp LICENSE NOTICE package-output/
         (
           cd package-output
@@ -215,11 +242,12 @@ jobs:
           --arg os "debian13" \
           --arg postgresMajor "18" \
           --arg architecture "$PACKAGE_ARCH" \
-          --arg sourceRepository "${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}" \
+          --arg sourceRepository "$DOCUMENTDB_SOURCE_GITHUB_REPO" \
           --arg sourceRef "$DOCUMENTDB_SOURCE_REF" \
           --arg sourceCommit "$DOCUMENTDB_SOURCE_SHA" \
           --arg workflowRepository "$GITHUB_REPOSITORY" \
           --arg workflowRunId "$GITHUB_RUN_ID" \
+          --arg workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
           '{
             schemaVersion: $schemaVersion,
             documentdbVersion: $documentdbVersion,
@@ -237,7 +265,8 @@ jobs:
             },
             build: {
               repository: $workflowRepository,
-              runId: $workflowRunId
+              runId: $workflowRunId,
+              runAttempt: $workflowRunAttempt
             }
           }' > package-output/build-metadata.json
 
@@ -297,7 +326,9 @@ jobs:
         version: 1.3.1
 
     - name: Install cosign
-      uses: sigstore/cosign-installer@v3.8.2
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v2.6.5
 
     - name: Login to GHCR
       shell: bash
@@ -354,6 +385,7 @@ jobs:
     name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
     needs: [resolve-sources, publish-extension-packages]
     strategy:
+      fail-fast: false
       matrix:
         arch: [amd64, arm64]
         image:
@@ -387,7 +419,9 @@ jobs:
 
     - name: Install cosign
       if: matrix.image.name == 'documentdb'
-      uses: sigstore/cosign-installer@v3.8.2
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v2.6.5
 
     - name: Login to GHCR
       shell: bash
@@ -476,7 +510,9 @@ jobs:
         docker manifest push "ghcr.io/${{ github.repository }}/${{ matrix.image }}:${IMAGE_TAG}"
 
     - name: Install cosign
-      uses: sigstore/cosign-installer@v3.8.2
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v2.6.5
 
     - name: Sign manifest
       shell: bash
@@ -507,20 +543,34 @@ jobs:
     if: always()
     steps:
     - name: Summary
+      env:
+        PACKAGE_RESULT: ${{ needs.publish-extension-packages.result }}
+        IMAGE_RESULT: ${{ needs.create-manifest.result }}
+        DOCUMENTDB_VERSION: ${{ needs.resolve-sources.outputs.documentdb_version }}
+        DOCUMENTDB_SOURCE_REF: ${{ needs.resolve-sources.outputs.source_ref }}
+        DOCUMENTDB_SOURCE_SHA: ${{ needs.resolve-sources.outputs.source_sha }}
+        IMAGE_TAG: ${{ needs.resolve-sources.outputs.image_tag }}
+        GATEWAY_SOURCE_IMAGE: ${{ needs.resolve-sources.outputs.gateway_source_image }}
       shell: bash
       run: |
         {
           echo "## DocumentDB Image Build Summary"
           echo ""
-          echo "- **DocumentDB Version**: \`${{ needs.resolve-sources.outputs.documentdb_version }}\`"
-          echo "- **DocumentDB Source**: \`${{ env.DOCUMENTDB_SOURCE_GITHUB_REPO }}@${{ needs.resolve-sources.outputs.source_ref }}\`"
-          echo "- **Pinned Source Commit**: \`${{ needs.resolve-sources.outputs.source_sha }}\`"
-          echo "- **Candidate Image Tag**: \`${{ needs.resolve-sources.outputs.image_tag }}\`"
-          echo "- **Debian Package Artifacts**: \`${{ env.DOCUMENTDB_DEB_REPOSITORY }}:${{ needs.resolve-sources.outputs.image_tag }}-pg18-{amd64,arm64}\`"
-          echo "- **Gateway Source Image**: \`${{ needs.resolve-sources.outputs.gateway_source_image }}\`"
+          echo "- **Package Publication**: \`$PACKAGE_RESULT\`"
+          echo "- **Image Publication**: \`$IMAGE_RESULT\`"
+          echo "- **DocumentDB Version**: \`$DOCUMENTDB_VERSION\`"
+          echo "- **DocumentDB Source**: \`${DOCUMENTDB_SOURCE_GITHUB_REPO}@${DOCUMENTDB_SOURCE_REF}\`"
+          echo "- **Pinned Source Commit**: \`$DOCUMENTDB_SOURCE_SHA\`"
+          echo "- **Candidate Image Tag**: \`$IMAGE_TAG\`"
+          echo "- **Debian Package Artifacts**: \`${DOCUMENTDB_DEB_REPOSITORY}:${IMAGE_TAG}-pg18-{amd64,arm64}\`"
+          echo "- **Gateway Source Image**: \`$GATEWAY_SOURCE_IMAGE\`"
           echo "- **Images**: documentdb, gateway"
           echo ""
-          echo "To release these images and package artifacts, run \`release_documentdb_images.yml\` with:"
-          echo "- candidate_version: \`${{ needs.resolve-sources.outputs.image_tag }}\`"
-          echo "- version: \`${{ needs.resolve-sources.outputs.documentdb_version }}\`"
+          if [[ "$PACKAGE_RESULT" == "success" && "$IMAGE_RESULT" == "success" ]]; then
+            echo "To release these images and package artifacts, run \`release_documentdb_images.yml\` with:"
+            echo "- candidate_version: \`$IMAGE_TAG\`"
+            echo "- version: \`$DOCUMENTDB_VERSION\`"
+          else
+            echo "The candidate build did not complete successfully and must not be promoted."
+          fi
         } >> "$GITHUB_STEP_SUMMARY"

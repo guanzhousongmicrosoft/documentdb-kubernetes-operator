@@ -33,7 +33,7 @@ Skip this step if you don't need to change the DocumentDB extension or gateway.
     - `version`: `0.116.0` (or the version declared by your source)
     - `documentdb_source_github_repo`: `documentdb/documentdb`, or `<your-gh-user>/documentdb` for custom source
     - `documentdb_source_ref`: leave empty to use the release tag derived from `version`, or provide your custom source branch/tag
-    - `documentdb_gateway_image_repo`: `ghcr.io/<your-gh-user>/documentdb/documentdb-local`
+    - `documentdb_gateway_image_repo`: leave the default `ghcr.io/documentdb/documentdb/documentdb-local` for released versions, or use your own public image repository when testing custom gateway changes
 
     The workflow resolves the source ref to an immutable commit, builds the
     Debian 13 / PostgreSQL 18 extension packages on native amd64 and arm64

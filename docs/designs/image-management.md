@@ -44,8 +44,12 @@ All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/
 
 | Image | GHCR Path | Source | Dockerfile | Purpose |
 |-------|-----------|--------|------------|---------|
-| **documentdb** | `.../documentdb` | Public `deb13` PostgreSQL 18 package from `documentdb/documentdb` releases | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
+| **documentdb** | `.../documentdb` | Debian 13 / PostgreSQL 18 package built from a pinned `documentdb/documentdb` source commit | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
 | **gateway** | `.../gateway` | Public gateway payload copied from `ghcr.io/documentdb/documentdb/documentdb-local:pg17-<version>` | `.github/dockerfiles/Dockerfile_gateway_public_image` | MongoDB wire-protocol gateway binary (Rust) |
+
+The source-built extension packages are retained as signed OCI artifacts at
+`.../documentdb-deb13:<candidate>-pg18-<arch>` and promoted to
+`.../documentdb-deb13:<version>-pg18-<arch>`.
 
 ### External Image (Not Built Here)
 
@@ -210,7 +214,7 @@ Builds documentdb extension and gateway images from released DocumentDB source.
 | **Build time** | ~15 minutes (native package builds + image builds) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (package OCI artifacts and image manifests) |
-| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.116.0`) |
+| **Version detection** | Required workflow input or repository dispatch payload |
 
 The build process:
 1. Resolves the released DocumentDB version and source ref to an immutable commit
@@ -282,26 +286,31 @@ Flow:
 
 ### Database Image Release (`release_documentdb_images.yml`)
 
-Promotes documentdb/gateway candidate images and auto-creates a PR to update defaults.
+Verifies and promotes the documentdb/gateway images and their corresponding
+Debian package artifacts.
 
 ```
 Inputs:
   candidate_version: "0.111.0-build-123456789-1-deadbee"   ← source tag
   version: "0.111.0"                  ← target release tag
-  update_defaults: true               ← create PR to bump versions
 
 Flow:
-  1. Promote Images
+  1. Verify Complete Candidate
+     ├── Validate candidate and target versions
+     ├── Verify image and package signatures
+     ├── Validate package metadata and architectures
+     └── Reject conflicting existing stable tags
+
+  2. Promote Images
      └── docker buildx imagetools create
          -t .../documentdb:0.111.0  .../documentdb:0.111.0-test
          -t .../gateway:0.111.0     .../gateway:0.111.0-test
-  
-  2. Update Defaults (auto-PR)
-     ├── constants.go: DEFAULT_DOCUMENTDB_IMAGE, DEFAULT_GATEWAY_IMAGE
-     ├── config.go: sidecar plugin default gateway image
-     ├── values.yaml: documentDbVersion
-     ├── test-backup-and-restore.yml: fallback images
-     └── Opens PR: "chore: bump DocumentDB images to 0.111.0"
+
+  3. Promote Package Artifacts
+     └── oras tag
+         .../documentdb-deb13:0.111.0-pg18-{amd64,arm64}
+
+  4. Create a normal reviewed PR to update operator defaults
 ```
 
 ---
@@ -366,7 +375,8 @@ The script uses `kind_with_registry.sh` to set up a `registry:2` container on `l
 
 ## Version Synchronization Points
 
-When bumping database image versions, the following locations must be updated (automated by `release_documentdb_images.yml`):
+After promoting database images, update the following locations in a separate
+reviewed pull request:
 
 | File | Field | Example |
 |------|-------|---------|
@@ -375,11 +385,8 @@ When bumping database image versions, the following locations must be updated (a
 | `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.113.0` |
 | `operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go` | Expected gateway image | `...gateway:0.113.0` |
 | `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.113.0"` |
-| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.113.0` |
-| `.github/workflows/test-upgrade-and-rollback.yml` | `RELEASED_DATABASE_VERSION` | `0.113.0` |
-| `.github/workflows/build_documentdb_images.yml` | `DEFAULT_DOCUMENTDB_VERSION`, input default | `0.113.0` |
-| `.github/workflows/release_documentdb_images.yml` | Input default | `0.113.0` |
 | `.github/dockerfiles/Dockerfile_gateway_public_image` | `SOURCE_IMAGE` ARG default | `...pg17-0.113.0` |
+| `test/e2e/tests/upgrade/helpers_test.go` | Old/new schema-upgrade defaults | `0.110.0` / `0.113.0` |
 
 When bumping operator versions, update:
 
