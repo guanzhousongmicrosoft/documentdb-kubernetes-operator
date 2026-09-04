@@ -78,31 +78,8 @@ After the PR is approved and merged:
 
 Database images follow an **independent release cycle** from the operator:
 
-1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the released DocumentDB `version`. The workflow builds Debian 13 / PostgreSQL 18 extension packages from the pinned upstream source tag, publishes the signed package bundles to GHCR, and builds the extension and gateway candidate images.
-2. Run **"RELEASE - Promote DocumentDB Images"** (`release_documentdb_images.yml`) to verify and promote the package artifacts and images.
-3. Create a separate PR to bump the default DocumentDB version in the operator, Helm chart, sidecar configuration, gateway Dockerfile, and upgrade tests. Keeping this as a normal PR ensures the version change receives review and CI before users adopt it.
-
-The extension packages are stored as OCI artifacts rather than as an APT
-repository:
-
-```text
-ghcr.io/<owner>/documentdb-kubernetes-operator/documentdb-deb13:<version>-pg18-<arch>
-```
-
-Candidate package tags include the workflow run identifier and are consumed by
-the image build in the same workflow. The promotion workflow adds stable
-version tags without changing the signed artifact digest. Existing stable tags
-are accepted only when they already point to the same digest; changed artifacts
-must use a new release version.
-
-Only candidates created by `build_documentdb_images.yml` after package-artifact
-publication was introduced can be promoted by `release_documentdb_images.yml`;
-older image-only candidate tags do not have the required package artifacts and
-fail candidate verification before any stable tag is changed.
-
-GHCR package visibility is managed separately from repository visibility.
-Confirm that the `documentdb`, `gateway`, and `documentdb-deb13` packages are
-public before publishing a public release.
+1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the released DocumentDB `version`. For version 0.116.0 and later, the workflow builds the Debian 13 / PostgreSQL 18 extension package from pinned source before building the images.
+2. Run **"RELEASE - Promote DocumentDB Images"** (`release_documentdb_images.yml`) to promote and auto-create a PR that bumps default image versions across the codebase
 
 > **Note:** The deprecated combined workflows (`build_images.yml`, `release_images.yml`) are still available but will be removed in a future release.
 

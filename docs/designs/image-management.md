@@ -44,12 +44,8 @@ All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/
 
 | Image | GHCR Path | Source | Dockerfile | Purpose |
 |-------|-----------|--------|------------|---------|
-| **documentdb** | `.../documentdb` | Debian 13 / PostgreSQL 18 package built from a pinned `documentdb/documentdb` source commit | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
+| **documentdb** | `.../documentdb` | Debian 13 / PostgreSQL 18 package built from pinned `documentdb/documentdb` source (releases before 0.116 use published assets) | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
 | **gateway** | `.../gateway` | Public gateway payload copied from `ghcr.io/documentdb/documentdb/documentdb-local:pg17-<version>` | `.github/dockerfiles/Dockerfile_gateway_public_image` | MongoDB wire-protocol gateway binary (Rust) |
-
-The source-built extension packages are retained as signed OCI artifacts at
-`.../documentdb-deb13:<candidate>-pg18-<arch>` and promoted to
-`.../documentdb-deb13:<version>-pg18-<arch>`.
 
 ### External Image (Not Built Here)
 
@@ -213,17 +209,16 @@ Builds documentdb extension and gateway images from released DocumentDB source.
 | **Tag pattern** | `{documentdb_version}-build-{run_id}-{attempt}-{sha}` (candidate) |
 | **Build time** | ~15 minutes (native package builds + image builds) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
-| **Signing** | cosign keyless (package OCI artifacts and image manifests) |
-| **Version detection** | Required workflow input or repository dispatch payload |
+| **Signing** | cosign keyless (OIDC) |
+| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.113.0`) |
 
 The build process:
 1. Resolves the released DocumentDB version and source ref to an immutable commit
-2. Builds Debian 13 PostgreSQL 18 extension packages on native amd64 and arm64 runners
-3. Validates the package name, version, architecture, and checksum
-4. Publishes the package, checksum, build metadata, LICENSE, and NOTICE as signed OCI artifacts under `documentdb-deb13`
-5. Verifies and pulls those exact GHCR artifacts to build `Dockerfile_extension` (which also installs pg_cron, pgvector, and postgis)
-6. Verifies the public multi-arch `documentdb-local:pg17-<version>` image and builds `Dockerfile_gateway_public_image` from its gateway payload
-7. Creates and signs the multi-architecture extension and gateway image manifests
+2. Builds Debian 13 PostgreSQL 18 extension packages on native amd64 and arm64 runners; releases before 0.116 use their published packages
+3. Validates each package's name, version, and architecture
+4. Uses each package directly to build `Dockerfile_extension` (installs pg_cron, pgvector, and postgis alongside)
+5. Verifies the public multi-arch `documentdb-local:pg17-<version>` image and builds `Dockerfile_gateway_public_image` from its gateway payload
+6. Creates and signs the multi-architecture extension and gateway image manifests
 
 ### Dockerfile Details
 
@@ -286,31 +281,26 @@ Flow:
 
 ### Database Image Release (`release_documentdb_images.yml`)
 
-Verifies and promotes the documentdb/gateway images and their corresponding
-Debian package artifacts.
+Promotes documentdb/gateway candidate images and auto-creates a PR to update defaults.
 
 ```
 Inputs:
   candidate_version: "0.111.0-build-123456789-1-deadbee"   ← source tag
   version: "0.111.0"                  ← target release tag
+  update_defaults: true               ← create PR to bump versions
 
 Flow:
-  1. Verify Complete Candidate
-     ├── Validate candidate and target versions
-     ├── Verify image and package signatures
-     ├── Validate package metadata and architectures
-     └── Reject conflicting existing stable tags
-
-  2. Promote Images
+  1. Promote Images
      └── docker buildx imagetools create
          -t .../documentdb:0.111.0  .../documentdb:0.111.0-test
          -t .../gateway:0.111.0     .../gateway:0.111.0-test
-
-  3. Promote Package Artifacts
-     └── oras tag
-         .../documentdb-deb13:0.111.0-pg18-{amd64,arm64}
-
-  4. Create a normal reviewed PR to update operator defaults
+  
+  2. Update Defaults (auto-PR)
+     ├── constants.go: DEFAULT_DOCUMENTDB_IMAGE, DEFAULT_GATEWAY_IMAGE
+     ├── config.go: sidecar plugin default gateway image
+     ├── values.yaml: documentDbVersion
+     ├── test-backup-and-restore.yml: fallback images
+     └── Opens PR: "chore: bump DocumentDB images to 0.111.0"
 ```
 
 ---
@@ -375,8 +365,7 @@ The script uses `kind_with_registry.sh` to set up a `registry:2` container on `l
 
 ## Version Synchronization Points
 
-After promoting database images, update the following locations in a separate
-reviewed pull request:
+When bumping database image versions, the following locations must be updated (automated by `release_documentdb_images.yml`):
 
 | File | Field | Example |
 |------|-------|---------|
@@ -385,8 +374,11 @@ reviewed pull request:
 | `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.113.0` |
 | `operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go` | Expected gateway image | `...gateway:0.113.0` |
 | `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.113.0"` |
+| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.113.0` |
+| `.github/workflows/test-upgrade-and-rollback.yml` | `RELEASED_DATABASE_VERSION` | `0.113.0` |
+| `.github/workflows/build_documentdb_images.yml` | `DEFAULT_DOCUMENTDB_VERSION`, input default | `0.113.0` |
+| `.github/workflows/release_documentdb_images.yml` | Input default | `0.113.0` |
 | `.github/dockerfiles/Dockerfile_gateway_public_image` | `SOURCE_IMAGE` ARG default | `...pg17-0.113.0` |
-| `test/e2e/tests/upgrade/helpers_test.go` | Old/new schema-upgrade defaults | `0.110.0` / `0.113.0` |
 
 When bumping operator versions, update:
 

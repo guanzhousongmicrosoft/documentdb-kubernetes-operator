@@ -1,178 +1,186 @@
 name: RELEASE - Promote DocumentDB Images
 
-# Verifies and promotes DocumentDB extension packages and database images.
-# Updating the operator's default DocumentDB version is a separate reviewed change.
+# Promotes documentdb extension and gateway candidate images to release tags,
+# then creates a PR to update default versions across the codebase.
+# This workflow handles only the DATABASE version track (documentDbVersion).
+# For operator/sidecar releases, see release_operator.yml.
 
 on:
   workflow_dispatch:
     inputs:
       candidate_version:
-        description: 'Database candidate tag to promote (e.g., 0.116.0-build-123456789-1-deadbee)'
+        description: 'Database candidate tag to promote (e.g., 0.111.0-build-123456789-1-deadbee)'
         required: true
       version:
-        description: 'Database image release version (e.g., 0.116.0)'
+        description: 'Database image release version (e.g., 0.111.0)'
         required: true
+        default: '0.113.0'
+      update_defaults:
+        description: 'Create PR to update default image versions in code'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
-  contents: read
-
-concurrency:
-  group: release-documentdb-${{ inputs.version }}
-  cancel-in-progress: false
-
-env:
-  DOCUMENTDB_DEB_REPOSITORY: ghcr.io/${{ github.repository }}/documentdb-deb13
-  BUILD_WORKFLOW_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}
+  contents: write
+  packages: write
+  pull-requests: write
+  id-token: write
 
 jobs:
-  promote:
-    name: Verify and Promote Candidate
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      packages: write
+  # ---------------------------------------------------------------------------
+  # Promote documentdb and gateway images (retag candidate → release)
+  # ---------------------------------------------------------------------------
+  promote-database-images:
+    name: Promote ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [documentdb, gateway]
     steps:
-      - name: Install ORAS
-        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
-        with:
-          version: 1.3.1
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v2.6.5
-
       - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Validate release inputs
-        env:
-          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
-          VERSION: ${{ inputs.version }}
-        shell: bash
+      - name: Verify candidate exists
         run: |
-          set -euo pipefail
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Version must use dotted semver format, got: $VERSION" >&2
+          echo "Verifying ${{ matrix.image }}:${{ inputs.candidate_version }} exists..."
+          docker buildx imagetools inspect \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ inputs.candidate_version }}
+
+      - name: Retag existing manifest
+        env:
+          SOURCE_TAG: ${{ inputs.candidate_version }}
+          TARGET_TAG: ${{ inputs.version }}
+        run: |
+          echo "Promoting ${{ matrix.image }} from $SOURCE_TAG to $TARGET_TAG"
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.TARGET_TAG }} \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.SOURCE_TAG }}
+
+  # ---------------------------------------------------------------------------
+  # Update default versions in code and create PR
+  # ---------------------------------------------------------------------------
+  update-defaults:
+    name: Update Default Versions
+    runs-on: ubuntu-latest
+    needs: promote-database-images
+    if: ${{ inputs.update_defaults == true }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Detect current default version
+        id: current
+        run: |
+          # Extract the assigned DEFAULT_DOCUMENTDB_IMAGE value from constants.go.
+          CURRENT=$(sed -nE 's|^[[:space:]]*DEFAULT_DOCUMENTDB_IMAGE[[:space:]]*=.*:([0-9]+\.[0-9]+\.[0-9]+)".*|\1|p' \
+            operator/src/internal/utils/constants.go | head -1)
+          if [[ -z "$CURRENT" ]]; then
+            echo "Failed to extract current default version from operator/src/internal/utils/constants.go" >&2
             exit 1
           fi
-          if [[ "$CANDIDATE_VERSION" != "${VERSION}-build-"* ||
-                ! "$CANDIDATE_VERSION" =~ -build-[0-9]+-[0-9]+-[0-9a-f]{7}$ ]]; then
-            echo "Candidate '$CANDIDATE_VERSION' was not built for version '$VERSION'" >&2
-            exit 1
+          echo "current_version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current default version: $CURRENT"
+
+      - name: Update version references
+        env:
+          OLD_VERSION: ${{ steps.current.outputs.current_version }}
+          NEW_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
+            echo "Version $NEW_VERSION is already the default. No changes needed."
+            exit 0
           fi
 
-      - name: Verify complete candidate
-        env:
-          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
-          VERSION: ${{ inputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
+          echo "Updating default versions: $OLD_VERSION → $NEW_VERSION"
 
-          for IMAGE in documentdb gateway; do
-            REPOSITORY="ghcr.io/${GITHUB_REPOSITORY}/${IMAGE}"
-            SOURCE_REF="${REPOSITORY}:${CANDIDATE_VERSION}"
-            SOURCE_DIGEST=$(docker buildx imagetools inspect "$SOURCE_REF" \
-              --format '{{json .Manifest.Digest}}' | tr -d '"')
-            PLATFORMS=$(docker buildx imagetools inspect "$SOURCE_REF" --raw |
-              jq -r '[.manifests[].platform.architecture] | sort | join(",")')
+          # 1. Update operator constants.go
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/src/internal/utils/constants.go
 
-            if [[ ! "$SOURCE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ||
-                  "$PLATFORMS" != "amd64,arm64" ]]; then
-              echo "$SOURCE_REF is not a valid amd64/arm64 image candidate" >&2
-              exit 1
-            fi
+          # 2. Update sidecar plugin config.go
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/cnpg-plugins/sidecar-injector/internal/config/config.go
 
-            cosign verify \
-              --certificate-identity "$BUILD_WORKFLOW_IDENTITY" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              "${REPOSITORY}@${SOURCE_DIGEST}"
+          # 3. Update Helm chart values.yaml
+          sed -i "s|documentDbVersion: \"${OLD_VERSION}\"|documentDbVersion: \"${NEW_VERSION}\"|" \
+            operator/documentdb-helm-chart/values.yaml
 
-            TARGET_REF="${REPOSITORY}:${VERSION}"
-            if TARGET_DIGEST=$(docker buildx imagetools inspect "$TARGET_REF" \
-              --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"'); then
-              if [[ "$TARGET_DIGEST" != "$SOURCE_DIGEST" ]]; then
-                echo "$TARGET_REF already exists at $TARGET_DIGEST, not $SOURCE_DIGEST" >&2
-                exit 1
-              fi
-            fi
-          done
+          # 4. (Removed) Test workflow fallback images — the legacy
+          # test-backup-and-restore.yml and test-upgrade-and-rollback.yml
+          # workflows have been consolidated into test-e2e.yml. Database
+          # image versions for e2e are resolved from the operator's
+          # built-in defaults (constants.go) rather than per-workflow
+          # fallback tags, so no sed is required here.
 
-          for ARCH in amd64 arm64; do
-            SOURCE_REF="${DOCUMENTDB_DEB_REPOSITORY}:${CANDIDATE_VERSION}-pg18-${ARCH}"
-            SOURCE_DIGEST=$(oras resolve "$SOURCE_REF")
+          # 5. Update sidecar plugin config test (hardcoded expected gateway image)
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go
 
-            cosign verify \
-              --certificate-identity "$BUILD_WORKFLOW_IDENTITY" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              "${DOCUMENTDB_DEB_REPOSITORY}@${SOURCE_DIGEST}"
+          # 6. Update build workflow defaults
+          sed -i "s|DEFAULT_DOCUMENTDB_VERSION: '${OLD_VERSION}'|DEFAULT_DOCUMENTDB_VERSION: '${NEW_VERSION}'|" \
+            .github/workflows/build_documentdb_images.yml
+          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
+            .github/workflows/build_documentdb_images.yml
 
-            VERIFY_DIR=$(mktemp -d)
-            oras pull "${DOCUMENTDB_DEB_REPOSITORY}@${SOURCE_DIGEST}" --output "$VERIFY_DIR"
-            jq -e \
-              --arg version "$VERSION" \
-              --arg packageVersion "$VERSION_DASH" \
-              --arg arch "$ARCH" \
-              '.documentdbVersion == $version and
-               .package.name == "postgresql-18-documentdb" and
-               .package.version == $packageVersion and
-               .package.os == "debian13" and
-               .package.postgresMajor == "18" and
-               .package.architecture == $arch' \
-              "$VERIFY_DIR/build-metadata.json" >/dev/null
-            rm -rf "$VERIFY_DIR"
+          # 7. Update release workflow default version
+          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
+            .github/workflows/release_documentdb_images.yml
 
-            TARGET_REF="${DOCUMENTDB_DEB_REPOSITORY}:${VERSION}-pg18-${ARCH}"
-            if TARGET_DIGEST=$(oras resolve "$TARGET_REF" 2>/dev/null); then
-              if [[ "$TARGET_DIGEST" != "$SOURCE_DIGEST" ]]; then
-                echo "$TARGET_REF already exists at $TARGET_DIGEST, not $SOURCE_DIGEST" >&2
-                exit 1
-              fi
-            fi
-          done
+          # 8. Update gateway Dockerfile default source image ARG
+          sed -i "s|pg17-${OLD_VERSION}|pg17-${NEW_VERSION}|" \
+            .github/dockerfiles/Dockerfile_gateway_public_image
 
-      - name: Promote verified candidate
-        env:
-          CANDIDATE_VERSION: ${{ inputs.candidate_version }}
-          VERSION: ${{ inputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          # 9. Update e2e schema-upgrade default version pair. This is the
+          # single source of truth for the two-phase migration spec's CI
+          # default (test-e2e.yml passes only an optional override), so the
+          # released pair advances with each DB release: old <- previous
+          # default (OLD_VERSION), new <- released version (NEW_VERSION).
+          sed -i -E "s|(defaultOldDocumentDBVersion = )\"[0-9]+\.[0-9]+\.[0-9]+\"|\1\"${OLD_VERSION}\"|" \
+            test/e2e/tests/upgrade/helpers_test.go
+          sed -i -E "s|(defaultNewDocumentDBVersion = )\"[0-9]+\.[0-9]+\.[0-9]+\"|\1\"${NEW_VERSION}\"|" \
+            test/e2e/tests/upgrade/helpers_test.go
 
-          for IMAGE in documentdb gateway; do
-            REPOSITORY="ghcr.io/${GITHUB_REPOSITORY}/${IMAGE}"
-            SOURCE_DIGEST=$(docker buildx imagetools inspect "${REPOSITORY}:${CANDIDATE_VERSION}" \
-              --format '{{json .Manifest.Digest}}' | tr -d '"')
-            TARGET_REF="${REPOSITORY}:${VERSION}"
+          echo "=== Files modified ==="
+          git diff --name-only
+          echo ""
+          echo "=== Diff ==="
+          git diff
 
-            if TARGET_DIGEST=$(docker buildx imagetools inspect "$TARGET_REF" \
-              --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"'); then
-              echo "$TARGET_REF already points to verified digest $TARGET_DIGEST"
-            else
-              docker buildx imagetools create -t "$TARGET_REF" "${REPOSITORY}@${SOURCE_DIGEST}"
-            fi
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump DocumentDB default images to ${{ inputs.version }}"
+          title: "chore: bump DocumentDB default images to ${{ inputs.version }}"
+          body: |
+            ## Automated DocumentDB Version Bump
 
-            TARGET_DIGEST=$(docker buildx imagetools inspect "$TARGET_REF" \
-              --format '{{json .Manifest.Digest}}' | tr -d '"')
-            [[ "$TARGET_DIGEST" == "$SOURCE_DIGEST" ]]
-          done
+            Promoted images `documentdb` and `gateway` from candidate `${{ inputs.candidate_version }}` to release `${{ inputs.version }}`.
 
-          for ARCH in amd64 arm64; do
-            SOURCE_REF="${DOCUMENTDB_DEB_REPOSITORY}:${CANDIDATE_VERSION}-pg18-${ARCH}"
-            SOURCE_DIGEST=$(oras resolve "$SOURCE_REF")
-            TARGET_REF="${DOCUMENTDB_DEB_REPOSITORY}:${VERSION}-pg18-${ARCH}"
+            ### Changes
+            - Updated `DEFAULT_DOCUMENTDB_IMAGE` and `DEFAULT_GATEWAY_IMAGE` in `constants.go`
+            - Updated sidecar plugin default gateway image in `config.go` and `config_test.go`
+            - Updated `documentDbVersion` in Helm chart `values.yaml`
+            - Updated build/release workflow defaults in `build_documentdb_images.yml` and `release_documentdb_images.yml`
+            - Updated gateway Dockerfile default source image in `Dockerfile_gateway_public_image`
+            - Updated e2e schema-upgrade default version pair in `test/e2e/tests/upgrade/helpers_test.go` (old `${{ steps.current.outputs.current_version }}` → new `${{ inputs.version }}`)
 
-            if TARGET_DIGEST=$(oras resolve "$TARGET_REF" 2>/dev/null); then
-              echo "$TARGET_REF already points to verified digest $TARGET_DIGEST"
-            else
-              oras tag "${DOCUMENTDB_DEB_REPOSITORY}@${SOURCE_DIGEST}" "${VERSION}-pg18-${ARCH}"
-            fi
+            ### Image References
+            - `ghcr.io/${{ github.repository }}/documentdb:${{ inputs.version }}`
+            - `ghcr.io/${{ github.repository }}/gateway:${{ inputs.version }}`
 
-            TARGET_DIGEST=$(oras resolve "$TARGET_REF")
-            [[ "$TARGET_DIGEST" == "$SOURCE_DIGEST" ]]
-          done
+            ---
+            *Auto-generated by `release_documentdb_images.yml`*
+          branch: auto/documentdb-${{ inputs.version }}
+          delete-branch: true
+          labels: |
+            automated
+            version-bump
 
       - name: Release summary
         run: |
@@ -180,9 +188,12 @@ jobs:
             echo "## DocumentDB Image Release Summary"
             echo ""
             echo "- **Database Version**: \`${{ inputs.version }}\`"
-            echo "- **Source Candidate**: \`${{ inputs.candidate_version }}\`"
             echo "- **Images Promoted**: documentdb, gateway"
-            echo "- **Packages Promoted**: Debian 13, PostgreSQL 18, amd64 + arm64"
+            echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`"
             echo ""
-            echo "Default operator image versions are updated separately through a reviewed pull request."
           } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.current.outputs.current_version }}" != "${{ inputs.version }}" ]]; then
+            echo "- **PR Created**: Updates default versions from \`${{ steps.current.outputs.current_version }}\` to \`${{ inputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- **No PR needed**: Version \`${{ inputs.version }}\` is already the default" >> "$GITHUB_STEP_SUMMARY"
+          fi

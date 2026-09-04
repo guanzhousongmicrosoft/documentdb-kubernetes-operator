@@ -12,8 +12,6 @@
 #     --build-arg DEB_PACKAGE_REL_PATH=packages/documentdb_0.110-0_arm64.deb \
 #     -t documentdb-extension:latest \
 #     -f Dockerfile_extension .
-#
-# If present, upstream LICENSE and NOTICE files in packages/ are preserved.
 
 ARG BASE=ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
 FROM ${BASE} AS builder
@@ -33,17 +31,10 @@ RUN set -eux && \
         postgresql-${PG_MAJOR}-pgvector \
         postgresql-${PG_MAJOR}-postgis-3
 
-# Install the DocumentDB extension from a pre-built .deb. Copying the package
-# directory also allows release builds to preserve upstream license files while
-# remaining compatible with older test workflows that provide only the .deb.
-COPY packages/ /tmp/packages/
-RUN set -eux && \
-    dpkg -i "/tmp/packages/$(basename "${DEB_PACKAGE_REL_PATH}")" && \
-    if [ -f /tmp/packages/LICENSE ] && [ -f /tmp/packages/NOTICE ]; then \
-        mkdir -p /licenses/documentdb; \
-        cp /tmp/packages/LICENSE /tmp/packages/NOTICE /licenses/documentdb/; \
-    fi && \
-    rm -rf /tmp/packages
+# Install the DocumentDB extension from a pre-built .deb
+COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
+RUN dpkg -i /tmp/documentdb.deb && \
+    rm -f /tmp/documentdb.deb
 
 # Gather system library dependencies not present in the CNPG base image
 RUN set -eux && \
