@@ -207,7 +207,7 @@ Builds documentdb extension and gateway images from released DocumentDB source.
 | **Images** | documentdb, gateway |
 | **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_public_image` |
 | **Tag pattern** | `{documentdb_version}-build-{run_id}-{attempt}-{sha}` (candidate) |
-| **Build time** | ~15 minutes (native package builds + image builds) |
+| **Build time** | ~5 minutes (native package builds + image builds) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
 | **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.113.0`) |

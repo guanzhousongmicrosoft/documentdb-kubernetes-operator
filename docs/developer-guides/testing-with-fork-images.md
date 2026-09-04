@@ -28,11 +28,10 @@ If your change is purely Go controller code, skip Step 1 entirely and use the up
 
 Skip this step if you don't need to change the DocumentDB extension or gateway.
 
-1. For a released upstream version, no DocumentDB fork is required. For unreleased database changes, fork [`documentdb/documentdb`](https://github.com/documentdb/documentdb) and push the source branch you want to test.
+1. For a released upstream version, no DocumentDB fork is required. For unreleased database changes, fork [`documentdb/documentdb`](https://github.com/documentdb/documentdb), push your changes, and tag them as `v<MAJOR>.<MINOR>-<PATCH>` (for example, `v0.116-0`).
 2. **In your operator fork**, run **Actions → `RELEASE - Build DocumentDB Candidate Images` → Run workflow**. Provide these inputs:
-    - `version`: `0.116.0` (or the version declared by your source)
+    - `version`: `0.116.0` (or the dotted version matching your source tag)
     - `documentdb_extension_github_repo`: `documentdb/documentdb`, or `<your-gh-user>/documentdb` for custom source
-    - `documentdb_source_ref`: leave empty to use the release tag derived from `version`, or provide your custom source branch/tag
     - `documentdb_gateway_image_repo`: leave the default `ghcr.io/documentdb/documentdb/documentdb-local` for released versions, or use your own public image repository when testing custom gateway changes
 
     The workflow resolves the source ref to an immutable commit, builds the

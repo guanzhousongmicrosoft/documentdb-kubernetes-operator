@@ -11,17 +11,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Released DocumentDB version to build (for example 0.116.0)'
+        description: 'Released DocumentDB version to build (for example 0.113.0)'
         required: false
         default: '0.113.0'
       documentdb_extension_github_repo:
         description: 'GitHub owner/repo containing DocumentDB source and releases'
         required: false
         default: 'documentdb/documentdb'
-      documentdb_source_ref:
-        description: 'Optional DocumentDB source tag or branch (defaults to the release tag)'
-        required: false
-        default: ''
       documentdb_gateway_image_repo:
         description: 'Container image repo for gateway source (without tag)'
         required: false
@@ -57,8 +53,6 @@ jobs:
     steps:
     - name: Resolve released DocumentDB version
       id: version
-      env:
-        DOCUMENTDB_SOURCE_REF_INPUT: ${{ github.event.inputs.documentdb_source_ref }}
       run: |
         set -euo pipefail
         RAW_VERSION="${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
@@ -72,8 +66,7 @@ jobs:
           exit 1
         fi
         VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
-        SOURCE_REF="$DOCUMENTDB_SOURCE_REF_INPUT"
-        SOURCE_REF="${SOURCE_REF:-v${VERSION_DASH}}"
+        SOURCE_REF="v${VERSION_DASH}"
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
         GATEWAY_SOURCE_IMAGE="${{ env.DOCUMENTDB_GATEWAY_IMAGE_REPO }}:pg17-${VERSION}"
