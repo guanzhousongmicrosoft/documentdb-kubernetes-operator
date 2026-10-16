@@ -52,7 +52,14 @@ jobs:
 
       - name: Deploy release docs
         if: github.event_name == 'release'
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           VERSION=${{ github.event.release.tag_name }}
-          mike deploy ${VERSION} latest --push --update-aliases
-          mike set-default latest --push
+          # A prerelease must not take over the "latest" docs that external links point at.
+          if [[ "$PRERELEASE" == "true" ]]; then
+            mike deploy ${VERSION} --push
+          else
+            mike deploy ${VERSION} latest --push --update-aliases
+            mike set-default latest --push
+          fi
