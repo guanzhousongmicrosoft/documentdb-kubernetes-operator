@@ -54,8 +54,8 @@ const (
 	// on each DocumentDB release (old <- previous default, new <- released
 	// version). Do not duplicate it into workflow env; test-e2e.yml only
 	// passes an optional workflow_dispatch override.
-	defaultOldDocumentDBVersion = "0.116.0"
-	defaultNewDocumentDBVersion = "0.117.0"
+	defaultOldDocumentDBVersion = "0.117.0"
+	defaultNewDocumentDBVersion = "1.0.0"
 
 	// Optional gateway image overrides for the image-upgrade spec.
 	// When unset the spec patches only spec.image.documentDB and leaves
