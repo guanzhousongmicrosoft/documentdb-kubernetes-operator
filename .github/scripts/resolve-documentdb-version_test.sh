@@ -9,7 +9,8 @@ export DOCUMENTDB_GATEWAY_IMAGE_REPO=ghcr.io/documentdb/documentdb/documentdb-lo
 
 assert_output() {
   local expected="$1"
-  if [[ "$OUTPUT"$'\n' != *"$expected"$'\n'* ]]; then
+  # Whole-line match, so a renamed key (e.g. wrong_source_release_tag) fails.
+  if [[ $'\n'"$OUTPUT"$'\n' != *$'\n'"$expected"$'\n'* ]]; then
     printf 'Missing expected output: %s\nActual output:\n%s\n' "$expected" "$OUTPUT" >&2
     exit 1
   fi
@@ -53,6 +54,25 @@ if DOCUMENTDB_PACKAGE_SOURCE=pgdg RAW_VERSION=1.0.0 bash "$SCRIPT_DIR/resolve-do
   exit 1
 fi
 printf 'PASS: rejected package source pgdg\n'
+
+for case in 'apt 1.0-RC2' 'pgdg 1.0-RC2'; do
+  read -r source version <<<"$case"
+  if DOCUMENTDB_PACKAGE_SOURCE="$source" RAW_VERSION="$version" bash "$SCRIPT_DIR/resolve-documentdb-version.sh" >/dev/null 2>&1; then
+    printf 'FAIL: package source %s accepted for %s\n' "$source" "$version" >&2
+    exit 1
+  fi
+  printf 'PASS: rejected package source %s for %s\n' "$source" "$version"
+done
+OUTPUT=$(DOCUMENTDB_PACKAGE_SOURCE=source RAW_VERSION=1.0-RC2 bash "$SCRIPT_DIR/resolve-documentdb-version.sh")
+assert_output "source_release_tag=v1.0-RC2"
+printf 'PASS: 1.0-RC2 with package source source\n'
+
+for case in 'apt 1.0.0 apt' 'auto 1.0.0 apt' 'auto 1.0-RC2 source'; do
+  read -r requested version expected <<<"$case"
+  OUTPUT=$(DOCUMENTDB_PACKAGE_SOURCE="$requested" RAW_VERSION="$version" bash "$SCRIPT_DIR/resolve-documentdb-version.sh")
+  assert_output "package_source=$expected"
+  printf 'PASS: %s with package source %s\n' "$version" "$requested"
+done
 
 for invalid in '' 1.0 latest 1.0-RC0 1.0-RC02 1.0-RC 1.0-RC2-extra '1.0-RC2$(id)'; do
   if RAW_VERSION="$invalid" bash "$SCRIPT_DIR/resolve-documentdb-version.sh" >/dev/null 2>&1; then
