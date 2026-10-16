@@ -74,8 +74,7 @@ We follow [Semantic Versioning 2.0.0](https://semver.org/):
 |---------|-------------|-----------------|----------------|
 | v0.2.0 | Mar 2026 | KubeCon EU | Early Mar 2026 |
 | v0.3.0 | May 2026 | Microsoft Build | Early May 2026 |
-| v0.4.0 | Aug 2026 | Pre-conference prep | Early Aug 2026 |
-| v0.5.0 | Nov 2026 | Microsoft Ignite / KubeCon NA | Early Nov 2026 |
+| v1.0.0 | Oct 19, 2026 | DocumentDB 1.0 GA | Oct 2026 (`1.0.0-rc1`) |
 
 ---
 
@@ -126,6 +125,7 @@ v0.1.0 released -----> v0.2.0 released -----> v0.1.x EOL (3 months later)
 
 | Version | Release Date | End of Life | Status |
 |---------|--------------|-------------|--------|
+| v1.0.x | Oct 2026 | Per release policy | Supported |
 | v0.1.x | Dec 2025 | 3 months after v0.2.0 | Supported |
 | main | N/A | N/A | Development only |
 
@@ -171,6 +171,7 @@ We follow a **roll forward** strategy rather than backporting:
 
 | Operator Version | Minimum K8s | Maximum K8s | Tested Versions |
 |------------------|-------------|-------------|-----------------|
+| v1.0.x | 1.33 (ImageVolume gate enabled) | 1.35 | 1.33, 1.34, 1.35 |
 | v0.1.x | 1.28 | 1.32 | 1.30, 1.31, 1.32 |
 
 > **Policy:** We support Kubernetes versions that are within the [Kubernetes support window](https://kubernetes.io/releases/) at the time of the operator release.
@@ -179,12 +180,14 @@ We follow a **roll forward** strategy rather than backporting:
 
 | Operator Version | CloudNative-PG | cert-manager | Helm |
 |------------------|----------------|--------------|------|
+| v1.0.x | 1.29.x (chart 0.28.3) | 1.19+ | 3.x |
 | v0.1.x | 1.28.0 | 1.19.2+ | 3.x |
 
 ### DocumentDB Component Versions
 
 | Operator Version | PostgreSQL | DocumentDB Extension | DocumentDB Gateway |
 |------------------|------------|----------------------|--------------------|
+| v1.0.x | 18.x | `1.0-0` (image `1.0.0`) | `1.0.0` |
 | v0.1.x | 16.x | 1.x | 1.x |
 
 > **Note:** The operator bundles compatible versions of PostgreSQL, the DocumentDB Postgres extension (`pg_documentdb`), and the DocumentDB Gateway. Image tags follow the format `<postgres-version>-v<extension-version>` (e.g., `16.3-v1.3.0`). Our goal is to use CNPG [Image Catalog](https://cloudnative-pg.io/documentation/current/image_catalog/) to manage these versions in the future.

@@ -24,7 +24,10 @@ A DocumentDB deployment has two independently upgradable components:
 
 ## Upgrading the Operator
 
-The operator is deployed via Helm. Upgrading it does **not** restart your DocumentDB cluster pods or change any cluster components.
+The operator is deployed via Helm. Upgrading it does not change clusters that pin `spec.documentDBVersion` (or `spec.image`).
+
+!!! warning "Unpinned clusters follow the chart's engine version"
+    A cluster without `spec.documentDBVersion` runs the engine version bundled with the chart. Upgrading the chart rolls those clusters to the new chart's engine binary (a rolling restart). The schema is not migrated unless `spec.schemaVersion` is set. To control when the engine changes, pin `spec.documentDBVersion` on each cluster before upgrading the operator.
 
 !!! info
     The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.
@@ -301,6 +304,23 @@ Whether you can roll back depends on whether the schema has been updated:
 
 !!! tip
     This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting `schemaVersion`.
+
+### Upgrading to DocumentDB 1.0
+
+Run DocumentDB 1.0 on operator `1.0.0`, the release tested with it. Upgrade the operator first ([Upgrading the Operator](#upgrading-the-operator)), then move each cluster:
+
+| Current engine | Steps |
+|----------------|-------|
+| `0.117.0` or earlier `0.x` | Two-phase upgrade: set `documentDBVersion: "1.0.0"`, validate, then set `schemaVersion: "1.0.0"`. This runs `ALTER EXTENSION documentdb UPDATE TO '1.0-0'`, which cannot be undone. |
+| `1.0-RC2` | Set `documentDBVersion: "1.0.0"`. RC2 already uses schema `1.0-0`, so there is no schema migration. |
+
+```bash
+kubectl patch documentdb my-cluster -n default \
+  --type merge -p '{"spec":{"documentDBVersion":"1.0.0"}}'
+# After validating the new binary:
+kubectl patch documentdb my-cluster -n default \
+  --type merge -p '{"spec":{"schemaVersion":"1.0.0"}}'
+```
 
 ---
 
