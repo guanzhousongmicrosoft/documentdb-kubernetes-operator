@@ -28,6 +28,19 @@ else
   fi
   VERSION_DASH="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
   EXPECTED_DEB_VERSION="$VERSION_DASH"
+  # Stable releases come from PGDG unless forced to source, e.g. when PGDG
+  # has not yet packaged a release that is already tagged upstream.
+  case "${DOCUMENTDB_PACKAGE_SOURCE:-auto}" in
+    auto|apt) ;;
+    source)
+      PACKAGE_SOURCE=source
+      SOURCE_RELEASE_TAG="v${VERSION_DASH}"
+      ;;
+    *)
+      echo "DOCUMENTDB_PACKAGE_SOURCE must be auto, apt or source, got: $DOCUMENTDB_PACKAGE_SOURCE" >&2
+      exit 1
+      ;;
+  esac
 fi
 
 SHORT_SHA="${GITHUB_SHA:0:7}"

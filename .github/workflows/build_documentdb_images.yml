@@ -3,6 +3,7 @@ name: RELEASE - Build DocumentDB Candidate Images
 # Builds documentdb extension and gateway images from published DocumentDB artifacts.
 # - documentdb image: Debian 13 (trixie) PostgreSQL 18 extension package from the
 #   PGDG APT repository for stable releases, or pinned upstream source for RCs
+#   (and for stable releases when package_source=source)
 # - gateway image: public documentdb-local image payload
 # These images follow the DATABASE version track (documentDbVersion in values.yaml).
 # For operator/sidecar images, see build_operator_images.yml.
@@ -25,6 +26,12 @@ on:
         description: 'APT suite (distribution) to resolve the Debian 13 package from'
         required: false
         default: 'trixie-pgdg'
+      package_source:
+        description: 'Extension package source for stable versions (RCs always build from source)'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, apt, source]
       documentdb_gateway_image_repo:
         description: 'Container image repo for gateway source (without tag)'
         required: false
@@ -88,6 +95,7 @@ jobs:
       id: version
       env:
         RAW_VERSION: ${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}
+        DOCUMENTDB_PACKAGE_SOURCE: ${{ github.event.inputs.package_source || 'auto' }}
       run: |
         set -euo pipefail
         bash .github/scripts/resolve-documentdb-version.sh | tee -a "$GITHUB_OUTPUT"
