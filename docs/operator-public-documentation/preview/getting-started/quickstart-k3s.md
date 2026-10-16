@@ -275,4 +275,3 @@ helm uninstall documentdb-operator -n documentdb-operator
 - [Quickstart: Kind](quickstart-kind.md) — Docker-based local development
 - [Networking](../configuration/networking.md) — service types and load balancer configuration
 - [TLS](../configuration/tls.md) — certificate management options
-- [k3s Azure Fleet playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/k3s-azure-fleet) — multi-region K3s on Azure VMs with Istio

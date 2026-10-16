@@ -24,10 +24,10 @@ A DocumentDB deployment has two independently upgradable components:
 
 ## Upgrading the Operator
 
-The operator is deployed via Helm. Upgrading it does not change clusters that pin `spec.documentDBVersion` (or `spec.image`).
+The operator is deployed via Helm. Clusters that pin `spec.documentDBVersion`, or both `spec.image.documentDB` and `spec.image.gateway`, keep their DocumentDB engine images across an operator upgrade.
 
 !!! warning "Unpinned clusters follow the chart's engine version"
-    A cluster without `spec.documentDBVersion` runs the engine version bundled with the chart. Upgrading the chart rolls those clusters to the new chart's engine binary (a rolling restart). The schema is not migrated unless `spec.schemaVersion` is set. To control when the engine changes, pin `spec.documentDBVersion` on each cluster before upgrading the operator.
+    A cluster without `spec.documentDBVersion` runs the engine version bundled with the chart for every image it does not set explicitly in `spec.image`. Upgrading the chart rolls those images to the new chart's engine version (a rolling restart), and a cluster with `spec.schemaVersion: "auto"` then migrates its schema immediately. To control when the engine changes, pin `spec.documentDBVersion` on each cluster before upgrading the operator.
 
 !!! info
     The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.
@@ -307,12 +307,14 @@ Whether you can roll back depends on whether the schema has been updated:
 
 ### Upgrading to DocumentDB 1.0
 
-Run DocumentDB 1.0 on operator `1.0.0`, the release tested with it. Upgrade the operator first ([Upgrading the Operator](#upgrading-the-operator)), then move each cluster:
+Run DocumentDB 1.0 on operator `1.0.0`, the release tested with it. Before upgrading the operator, pin `spec.documentDBVersion` on every cluster to the version it runs now (see the warning in [Upgrading the Operator](#upgrading-the-operator)), and remove `schemaVersion: "auto"` so nothing migrates before you choose to. Then upgrade the operator and move each cluster:
 
 | Current engine | Steps |
 |----------------|-------|
 | `0.117.0` or earlier `0.x` | Two-phase upgrade: set `documentDBVersion: "1.0.0"`, validate, then set `schemaVersion: "1.0.0"`. This runs `ALTER EXTENSION documentdb UPDATE TO '1.0-0'`, which cannot be undone. |
-| `1.0-RC2` | Set `documentDBVersion: "1.0.0"`. RC2 already uses schema `1.0-0`, so there is no schema migration. |
+| `1.0-RC2` (from chart `1.0.0-rc1`) | In-place upgrade is not supported: release-candidate clusters are for fresh instances only. Keep the cluster pinned to `1.0-RC2`, create a new `1.0.0` cluster, and move your data with `mongodump`/`mongorestore`. |
+
+For a `0.x` cluster (if it sets `spec.image.documentDB` or `spec.image.gateway`, remove them in the first patch; explicit images take precedence over `documentDBVersion`):
 
 ```bash
 kubectl patch documentdb my-cluster -n default \
