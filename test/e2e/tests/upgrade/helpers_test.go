@@ -276,3 +276,10 @@ func podInstalledSchemaVersion(
 	}
 	return raw, nil
 }
+
+// unpullableVersionAbove returns "<major>.999.0" for a semver, which no release
+// publishes and which stays above v so the image-rollback webhook admits it.
+func unpullableVersionAbove(v string) string {
+	major, _, _ := strings.Cut(v, ".")
+	return fmt.Sprintf("%s.999.0", major)
+}
