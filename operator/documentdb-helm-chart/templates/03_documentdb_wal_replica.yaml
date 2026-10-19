@@ -1,4 +1,8 @@
 {{- if .Values.walReplica }}
+{{- $walRepo := include "documentdb.imageRef" (dict "name" "image.walreplica.repository" "registry" .Values.image.registry "repo" .Values.image.walreplica.repository "tag" "") }}
+{{- if eq $walRepo "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica" }}
+{{- fail "walReplica=true: no wal-replica image is published at ghcr.io/documentdb; point image.registry or image.walreplica.repository at one you built" -}}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:

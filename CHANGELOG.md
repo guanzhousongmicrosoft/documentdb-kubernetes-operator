@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Upgrade notes
+- **`walReplica: true` with the default image fails to render**: no `wal-replica` image is published, so point `image.registry` or `image.walreplica.repository` at one you built.
+
 ## [1.0.0] - 2026-10-19
 
 First generally available operator release, for DocumentDB 1.0. The operator and the DocumentDB engine keep separate version numbers; this chart deploys engine `1.0.0` (extension schema `1.0-0`) by default. See [Upgrading to DocumentDB 1.0](docs/operator-public-documentation/preview/operations/upgrades.md#upgrading-to-documentdb-10).

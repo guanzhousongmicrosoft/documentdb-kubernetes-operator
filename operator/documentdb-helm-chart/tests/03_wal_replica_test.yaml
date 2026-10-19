@@ -7,6 +7,10 @@ capabilities:
   apiVersions:
     - cert-manager.io/v1/Certificate
 
+# No wal-replica image is published upstream, so the chart requires a custom one.
+set:
+  image.registry: registry.example.com
+
 tests:
   # -------------------------------------------------------------------
   # Feature gate (walReplica)
@@ -88,14 +92,22 @@ tests:
           path: spec.template.spec.containers[0].name
           value: cnpg-i-wal-replica
 
-  - it: should use the default wal-replica image with appVersion tag
+  - it: should fail when walReplica is enabled with the unpublished default image
+    set:
+      walReplica: true
+      image.registry: ghcr.io
+    asserts:
+      - failedTemplate:
+          errorPattern: "no wal-replica image is published"
+
+  - it: should use appVersion as the tag for a custom wal-replica image
     set:
       walReplica: true
     documentIndex: 3
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica:1.0.0"
+          value: "registry.example.com/documentdb/documentdb-kubernetes-operator/wal-replica:1.0.0"
 
   - it: should use a custom wal-replica image tag when set
     set:
@@ -105,7 +117,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica:v9.9.9"
+          value: "registry.example.com/documentdb/documentdb-kubernetes-operator/wal-replica:v9.9.9"
 
   # -------------------------------------------------------------------
   # RBAC
